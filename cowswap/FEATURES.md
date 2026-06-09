@@ -10,7 +10,7 @@
 - [x] Keep Hummingbot order lifecycle logic outside the low-level CoW API client.
 - [x] Treat CoW orders as asynchronous intents, not synchronous swaps.
 - [x] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
-- [ ] Persist enough order metadata to recover after process restart before emitting terminal events.
+- [x] Persist enough order metadata to recover after process restart before emitting terminal events.
 - [ ] Use Hummingbot-managed signing and credential handling; never store, log, or pass raw private keys through connector configuration.
 - [x] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
 - [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
@@ -121,7 +121,7 @@
 - [x] Add health checks for Order Book API availability.
 - [x] Add safeguards for stale quotes.
 - [x] Add safeguards for duplicate submissions.
-- [ ] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
+- [x] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
 - [x] Add replay-focused signing tests for chain ID, verifying contract, and signer-owner mismatches.
 - [x] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
 - [ ] Run lint, typecheck, unit tests, and integration tests.
