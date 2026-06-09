@@ -9,13 +9,13 @@
 - [x] Keep the CoW API client focused on Order Book API calls and response normalization.
 - [x] Keep Hummingbot order lifecycle logic outside the low-level CoW API client.
 - [x] Treat CoW orders as asynchronous intents, not synchronous swaps.
-- [ ] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
+- [x] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
 - [ ] Persist enough order metadata to recover after process restart before emitting terminal events.
 - [ ] Use Hummingbot-managed signing and credential handling; never store, log, or pass raw private keys through connector configuration.
 - [ ] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
 - [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
 - [x] Keep configuration deterministic and environment-driven for Docker Compose packaging.
-- [ ] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
+- [x] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
 - [x] Document every supported chain, token scope, order type, limitation, and operational assumption.
 - [ ] Follow the Hummingbot connector test pattern: use shared-style mocked lifecycle tests for deterministic create/cancel/status/trade behavior, and keep live exchange/API tests separate and opt-in.
 - [x] Treat live CoW API tests with dummy wallets as smoke tests for quote, signing, posting, and classified API rejection; do not treat them as settlement/fill proof unless the account is funded and allowance is configured.
@@ -53,7 +53,7 @@
 - [x] Poll trades/fills by order UID.
 - [ ] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
 - [x] Handle expired orders.
-- [ ] Handle rejected quotes and rejected orders.
+- [x] Handle rejected quotes and rejected orders.
 - [x] Add unit tests for quote mapping, order mapping, and amount conversion.
 - [x] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
 - [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
@@ -117,7 +117,7 @@
 - [ ] Add retry policy for transient API failures.
 - [ ] Add timeout handling for quotes, posting, polling, and cancellation.
 - [ ] Add structured logging.
-- [ ] Add clear errors for unsupported tokens and chains.
+- [x] Add clear errors for unsupported tokens and chains.
 - [ ] Add health checks for Order Book API availability.
 - [x] Add safeguards for stale quotes.
 - [x] Add safeguards for duplicate submissions.

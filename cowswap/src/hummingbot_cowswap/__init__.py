@@ -3,6 +3,9 @@
 from hummingbot_cowswap.connector import CoWConnector
 from hummingbot_cowswap.errors import (
     CoWConnectorError,
+    CoWOrderBookAPIError,
+    CoWOrderBookMalformedResponseError,
+    CoWOrderBookTransientError,
     DuplicateOrderError,
     InsufficientAllowanceError,
     InsufficientBalanceError,
@@ -25,6 +28,9 @@ __all__ = [
     "CoWConfig",
     "CoWConnector",
     "CoWConnectorError",
+    "CoWOrderBookAPIError",
+    "CoWOrderBookMalformedResponseError",
+    "CoWOrderBookTransientError",
     "CoWToken",
     "CowPyEip712Signer",
     "DuplicateOrderError",

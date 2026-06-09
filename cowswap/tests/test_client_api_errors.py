@@ -74,6 +74,14 @@ class TimeoutQuoteApi:
 class RejectedOrderApi:
     """Fake cowpy API that rejects order posting."""
 
+    async def post_quote(self, *_args: object) -> NoReturn:
+        """Raise a generic cowpy/API failure."""
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.common.api.errors import ApiResponseError
+
+        message = "unsupported token"
+        raise ApiResponseError(message, "UnsupportedToken", {})
+
     async def post_order(self, _order: object) -> NoReturn:
         """Raise a generic cowpy/API failure."""
         ensure_cowpy_submodule_imports()
@@ -101,6 +109,19 @@ async def test_quote_sell_wraps_timeout_as_transient_error(monkeypatch: pytest.M
         await client.quote_sell(quote_request())
 
     assert exc_info.value.__cause__.__class__.__name__ == "UnexpectedResponseError"
+
+
+@pytest.mark.asyncio
+async def test_quote_sell_wraps_api_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CoW quote rejections surface as connector-controlled API errors."""
+    client = CowDaoOrderBookClient(config())
+    monkeypatch.setattr(client, "_api", RejectedOrderApi())
+
+    with pytest.raises(CoWOrderBookAPIError, match="quote_sell") as exc_info:
+        await client.quote_sell(quote_request())
+
+    assert "unsupported token" in str(exc_info.value)
+    assert exc_info.value.__cause__.__class__.__name__ == "ApiResponseError"
 
 
 @pytest.mark.asyncio
