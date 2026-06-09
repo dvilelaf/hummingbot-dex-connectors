@@ -29,3 +29,15 @@ class StaleQuoteError(CoWConnectorError):
 
 class DuplicateOrderError(CoWConnectorError):
     """Raised when a client order ID is reused."""
+
+
+class CoWOrderBookAPIError(CoWConnectorError):
+    """Raised when the CoW Order Book API rejects a request."""
+
+
+class CoWOrderBookTransientError(CoWOrderBookAPIError):
+    """Raised when the CoW Order Book API call fails transiently."""
+
+
+class CoWOrderBookMalformedResponseError(CoWOrderBookAPIError):
+    """Raised when cowpy returns an unexpected Order Book API response shape."""

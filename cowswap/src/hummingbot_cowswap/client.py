@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
+from hummingbot_cowswap.errors import (
+    CoWOrderBookAPIError,
+    CoWOrderBookMalformedResponseError,
+    CoWOrderBookTransientError,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from hummingbot_cowswap.models import CoWConfig
+
+T = TypeVar("T")
 
 
 class CoWClient(Protocol):
@@ -57,23 +66,26 @@ class CowDaoOrderBookClient:
             TokenAmount,
         )
 
-        return await self._order_book_api().post_quote(
-            OrderQuoteRequest(
-                sellToken=str(request["sell_token"]),
-                buyToken=str(request["buy_token"]),
-                receiver=str(request["receiver"]),
-                from_=str(request["owner"]),
-                appData=str(request["app_data"]),
-                sellTokenBalance=SellTokenSource.erc20,
-                buyTokenBalance=BuyTokenDestination.erc20,
-                priceQuality=PriceQuality.verified,
-                signingScheme=SigningScheme.eip712,
+        return await _call_order_book(
+            "quote_sell",
+            self._order_book_api().post_quote(
+                OrderQuoteRequest(
+                    sellToken=str(request["sell_token"]),
+                    buyToken=str(request["buy_token"]),
+                    receiver=str(request["receiver"]),
+                    from_=str(request["owner"]),
+                    appData=str(request["app_data"]),
+                    sellTokenBalance=SellTokenSource.erc20,
+                    buyTokenBalance=BuyTokenDestination.erc20,
+                    priceQuality=PriceQuality.verified,
+                    signingScheme=SigningScheme.eip712,
+                ),
+                OrderQuoteSide1(
+                    kind=OrderQuoteSideKindSell.sell,
+                    sellAmountBeforeFee=TokenAmount(str(request["sell_amount"])),
+                ),
+                OrderQuoteValidity1(validTo=request["valid_to"]),
             ),
-            OrderQuoteSide1(
-                kind=OrderQuoteSideKindSell.sell,
-                sellAmountBeforeFee=TokenAmount(str(request["sell_amount"])),
-            ),
-            OrderQuoteValidity1(validTo=request["valid_to"]),
         )
 
     async def post_sell_order(self, order: dict[str, object]) -> str:
@@ -110,22 +122,37 @@ class CowDaoOrderBookClient:
             quoteId=order.get("quote_id"),
             appData=str(order["app_data"]),
         )
-        uid = await self._order_book_api().post_order(order_creation)
-        return uid.root
+        uid = await _call_order_book(
+            "post_sell_order",
+            self._order_book_api().post_order(order_creation),
+        )
+        try:
+            return str(uid.root)
+        except AttributeError as exc:
+            message = (
+                "malformed CoW Order Book API response during post_sell_order: missing UID root"
+            )
+            raise CoWOrderBookMalformedResponseError(message) from exc
 
     async def get_order_status(self, order_uid: str) -> object:
         """Fetch the cowdao-cowpy order status model by UID."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import UID
 
-        return await self._order_book_api().get_order_by_uid(UID(order_uid))
+        return await _call_order_book(
+            "get_order_status",
+            self._order_book_api().get_order_by_uid(UID(order_uid)),
+        )
 
     async def get_trades(self, order_uid: str) -> list[object]:
         """Fetch cowdao-cowpy trade models for a CoW order UID."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import UID
 
-        return await self._order_book_api().get_trades_by_order_uid(UID(order_uid))
+        return await _call_order_book(
+            "get_trades",
+            self._order_book_api().get_trades_by_order_uid(UID(order_uid)),
+        )
 
     async def cancel_order(self, order_uid: str) -> None:
         """Reject cancellation until signed cancellation is wired in."""
@@ -147,3 +174,38 @@ class CowDaoOrderBookClient:
                 )
             )
         return self._api
+
+
+async def _call_order_book(operation: str, request: Awaitable[T]) -> T:
+    """Convert cowpy API failures into connector-controlled exceptions."""
+    ensure_cowpy_submodule_imports()
+    from cowdao_cowpy.common.api.errors import (
+        ApiResponseError,
+        NetworkError,
+        SerializationError,
+        UnexpectedResponseError,
+    )
+
+    try:
+        return await request
+    except (TimeoutError, NetworkError) as exc:
+        message = f"transient CoW Order Book API failure during {operation}: {exc}"
+        raise CoWOrderBookTransientError(message) from exc
+    except UnexpectedResponseError as exc:
+        if _looks_like_timeout(exc):
+            message = f"transient CoW Order Book API failure during {operation}: {exc}"
+            raise CoWOrderBookTransientError(message) from exc
+        message = f"malformed CoW Order Book API response during {operation}: {exc}"
+        raise CoWOrderBookMalformedResponseError(message) from exc
+    except SerializationError as exc:
+        message = f"malformed CoW Order Book API response during {operation}: {exc}"
+        raise CoWOrderBookMalformedResponseError(message) from exc
+    except ApiResponseError as exc:
+        message = f"CoW Order Book API rejected {operation}: {exc}"
+        raise CoWOrderBookAPIError(message) from exc
+
+
+def _looks_like_timeout(exc: Exception) -> bool:
+    """Return whether cowpy wrapped a timeout as an unexpected response."""
+    message = str(exc).lower()
+    return "timeout" in message or "timed out" in message
