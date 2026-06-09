@@ -404,9 +404,48 @@ async def test_poll_order_maps_fulfilled_status_and_trade_amounts_to_filled_stat
 
 
 @pytest.mark.asyncio
-async def test_cancel_order_reconciles_cancelled_state(tmp_path: Path) -> None:
+async def test_poll_order_maps_presignature_pending_to_submitted_state(tmp_path: Path) -> None:
     client = FakeCoWClient()
     cow = connector(tmp_path, client)
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-intent",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+    client.status = cow_order(
+        status="presignaturePending",
+        executed_sell="0",
+        executed_buy="0",
+    )
+
+    updated = await cow.poll_order(tracked.client_order_id)
+
+    assert updated.state is OrderState.SUBMITTED
+    assert updated.raw_status == "presignaturePending"
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_reconciles_cancelled_state(tmp_path: Path) -> None:
+    account = Account.create()
+    cfg = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+        slippage_bps=50,
+    )
+    client = FakeCoWClient()
+    cow = CoWConnector(
+        config=cfg,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=cfg, account=account),
+    )
     tracked = await cow.submit_sell_order(
         SellOrderRequest(
             client_order_id="cid-3",
@@ -465,8 +504,22 @@ async def test_cancel_order_uses_signed_cancellation_when_signer_is_configured(
 
 @pytest.mark.asyncio
 async def test_cancel_order_reconciles_settlement_race_as_filled(tmp_path: Path) -> None:
+    account = Account.create()
+    cfg = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+        slippage_bps=50,
+    )
     client = FakeCoWClient()
-    cow = connector(tmp_path, client)
+    cow = CoWConnector(
+        config=cfg,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=cfg, account=account),
+    )
     tracked = await cow.submit_sell_order(
         SellOrderRequest(
             client_order_id="cid-cancel-race",
@@ -486,6 +539,37 @@ async def test_cancel_order_reconciles_settlement_race_as_filled(tmp_path: Path)
 
     assert client.cancelled_uids == [tracked.order_uid]
     assert cancelled.state is OrderState.FILLED
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_requires_hummingbot_managed_signer(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    cow = CoWConnector(
+        config=CoWConfig(
+            chain_id=8453,
+            chain_name="base",
+            owner="0x00000000000000000000000000000000000000aa",
+            receiver="0x00000000000000000000000000000000000000aa",
+            app_data="0x" + "00" * 32,
+            slippage_bps=50,
+        ),
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+    )
+
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-no-signer",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+    client.status = cow_order(status="cancelled", executed_sell="0", executed_buy="0")
+
+    with pytest.raises(NotImplementedError, match="requires a Hummingbot-managed signer"):
+        await cow.cancel_order(tracked.client_order_id)
 
 
 @pytest.mark.asyncio

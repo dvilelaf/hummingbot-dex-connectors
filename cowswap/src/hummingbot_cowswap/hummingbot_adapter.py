@@ -39,6 +39,20 @@ HUMMINGBOT_ORDER_STATES = {
     OrderState.EXPIRED: "FAILED",
     OrderState.FAILED: "FAILED",
 }
+RAW_COW_STATE_TO_HUMMINGBOT_ORDER_STATE = {
+    "presignaturepending": "PENDING_CREATE",
+    "open": "OPEN",
+    "fulfilled": "FILLED",
+    "cancelled": "CANCELED",
+    "expired": "FAILED",
+}
+RAW_COW_STATE_TO_EVENT_TAG = {
+    "presignaturepending": "OrderCreated",
+    "open": "OrderCreated",
+    "fulfilled": "OrderFilled",
+    "cancelled": "OrderCancelled",
+    "expired": "OrderExpired",
+}
 
 
 class OrderConnector(Protocol):
@@ -341,6 +355,9 @@ def _hummingbot_order_state(order: object) -> str:
     state = _order_value(order, "state")
     if isinstance(state, OrderState):
         return HUMMINGBOT_ORDER_STATES[state]
+    raw_status = str(state).lower() if state is not None else _hummingbot_raw_status(order)
+    if raw_status in RAW_COW_STATE_TO_HUMMINGBOT_ORDER_STATE:
+        return RAW_COW_STATE_TO_HUMMINGBOT_ORDER_STATE[raw_status]
     if state is not None:
         normalized = str(state).upper()
         if normalized == "CANCELLED":
@@ -353,6 +370,9 @@ def _hummingbot_order_event_tag(order: object) -> str:
     state = _order_value(order, "state")
     if isinstance(state, OrderState):
         return HUMMINGBOT_ORDER_EVENT_TAGS[state]
+    raw_status = str(state).lower() if state is not None else _hummingbot_raw_status(order)
+    if raw_status in RAW_COW_STATE_TO_EVENT_TAG:
+        return RAW_COW_STATE_TO_EVENT_TAG[raw_status]
     normalized = str(state).lower() if state is not None else ""
     for local_state, event_tag in HUMMINGBOT_ORDER_EVENT_TAGS.items():
         if normalized == local_state.value:
@@ -382,6 +402,11 @@ def _order_value(order: object, key: str) -> object | None:
     if isinstance(order, Mapping):
         return order.get(key)
     return getattr(order, key, None)
+
+
+def _hummingbot_raw_status(order: object) -> str:
+    raw_status = _order_value(order, "raw_status")
+    return str(raw_status).lower() if raw_status is not None else ""
 
 
 def _reject_private_key_material(kwargs: Mapping[str, object]) -> None:

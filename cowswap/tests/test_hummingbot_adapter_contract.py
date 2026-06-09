@@ -199,6 +199,24 @@ def test_adapter_maps_order_updates_to_hummingbot_style_events() -> None:
     }
 
 
+def test_adapter_maps_connector_raw_status_to_hummingbot_state_and_event() -> None:
+    adapter = HummingbotCoWAdapter(FakeConnector(), {"USDC-WETH": (USDC, WETH)})
+
+    adapter.record_order_update(
+        {
+            "client_order_id": "cid-presigned",
+            "trading_pair": "USDC-WETH",
+            "order_uid": "0xuid",
+            "state": None,
+            "raw_status": "presignaturePending",
+        }
+    )
+
+    assert adapter.order_statuses["cid-presigned"] == "PENDING_CREATE"
+    assert adapter.event_log[0].order_state == "PENDING_CREATE"
+    assert adapter.event_log[0].event_tag == "OrderCreated"
+
+
 def _tracked_order(client_order_id: str, state: OrderState) -> TrackedOrder:
     return TrackedOrder(
         client_order_id=client_order_id,

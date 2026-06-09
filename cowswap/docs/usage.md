@@ -30,6 +30,11 @@ export HUMMINGBOT_API_PASSWORD=...
 Keep EVM RPC, wallet, approval, and signing credentials in Hummingbot/Gateway
 account handling. Never put raw private keys in config, logs, or artifacts.
 
+Signer/cancel boundary for production runtime:
+- `CoWConnector` accepts an injected signer object for request signing and cancellation.
+- Runtime API calls must provide a Hummingbot-managed signer path; without it,
+  cancellation is rejected before reaching the CoW API.
+
 Install into the Python environment that launches Hummingbot API:
 ```bash
 cd cowswap
@@ -79,10 +84,19 @@ Supported chains:
 - Avalanche C-Chain `43114`
 - BNB Smart Chain `56`
 
+Order-state mapping currently implemented:
+- `presignaturePending` (off-chain signing path) → `PENDING_CREATE` / `OrderCreated`
+- `open` with no executed amount → `OPEN` / `OrderCreated`
+- `open` with partial executed amounts → `PARTIALLY_FILLED` / `OrderFilled`
+- `fulfilled` → `FILLED` / `OrderFilled`
+- `cancelled` → `CANCELED` / `OrderCancelled`
+- `expired` → `FAILED` / `OrderExpired`
+- unknown API status → `FAILED` / `OrderUpdated`
+
 Live limitations:
 
 - Buy/sell ERC-20/WETH only; no native ETH or generic limit orders.
 - Submitted signed intents are not fills; final ledgers need terminal
   order/trade/settlement evidence.
-- Cancellation needs Hummingbot-managed signed cancellation and is not wired
-  through the cowpy-backed client yet.
+- Cancellation uses signed off-chain cancellation when the runtime signer is
+  configured; production smoke still needs funded-account settlement evidence.

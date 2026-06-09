@@ -37,6 +37,13 @@ if TYPE_CHECKING:
 ORDER_DIGEST_HEX_LENGTH = 66
 ORDER_UID_HEX_LENGTH = 114
 EVM_ADDRESS_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
+_RAW_COW_STATUS_MAP = {
+    "presignaturepending": OrderState.SUBMITTED,
+    "open": OrderState.OPEN,
+    "fulfilled": OrderState.FILLED,
+    "cancelled": OrderState.CANCELLED,
+    "expired": OrderState.EXPIRED,
+}
 
 
 class CoWConnector:
@@ -166,6 +173,10 @@ class CoWConnector:
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
+        if self.signer is None:
+            tracked.metadata["signing_mode"] = "connector-signed-offchain"
+        else:
+            tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -229,6 +240,10 @@ class CoWConnector:
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
+        if self.signer is None:
+            tracked.metadata["signing_mode"] = "connector-signed-offchain"
+        else:
+            tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -249,9 +264,10 @@ class CoWConnector:
     async def cancel_order(self, client_order_id: str) -> TrackedOrder:
         """Request cancellation through the client and reconcile the final state."""
         tracked = self._load_order(client_order_id)
-        cancellation = None
-        if self.signer is not None:
-            cancellation = self.signer.sign_order_cancellation([tracked.order_uid])
+        if self.signer is None:
+            message = "cancel_order requires a Hummingbot-managed signer"
+            raise NotImplementedError(message)
+        cancellation = self.signer.sign_order_cancellation([tracked.order_uid])
         await self.client.cancel_order(tracked.order_uid, cancellation)
         return await self.poll_order(client_order_id)
 
@@ -280,13 +296,10 @@ class CoWConnector:
 
 def _map_order_state(status: str, executed_sell: str, executed_buy: str) -> OrderState:
     normalized = status.lower()
-    if normalized == "fulfilled":
-        return OrderState.FILLED
-    if normalized == "cancelled":
-        return OrderState.CANCELLED
-    if normalized == "expired":
-        return OrderState.EXPIRED
-    if normalized in {"open", "presignaturepending"}:
+    mapped = _RAW_COW_STATUS_MAP.get(normalized)
+    if mapped is not None and mapped is not OrderState.OPEN:
+        return mapped
+    if mapped == OrderState.OPEN:
         if int(executed_sell) > 0 or int(executed_buy) > 0:
             return OrderState.PARTIALLY_FILLED
         return OrderState.OPEN
