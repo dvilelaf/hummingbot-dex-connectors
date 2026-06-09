@@ -1,0 +1,52 @@
+[project]
+name = "hummingbot-cowswap-connector"
+version = "0.1.0"
+description = "MVP CoW Swap connector components for Hummingbot-style order lifecycle integration."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cowdao-cowpy>=1.0.1,<2",
+    "eth-account>=0.13,<1",
+    "pydantic>=2,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.24,<2",
+    "ruff>=0.8,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hummingbot_cowswap"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "ASYNC",
+    "B",
+    "C4",
+    "E",
+    "F",
+    "I",
+    "PERF",
+    "PIE",
+    "PT",
+    "PTH",
+    "RET",
+    "RUF",
+    "SIM",
+    "UP",
+    "W",
+]

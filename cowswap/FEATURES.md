@@ -17,6 +17,10 @@
 - [ ] Keep configuration deterministic and environment-driven for Docker Compose packaging.
 - [ ] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
 - [ ] Document every supported chain, token scope, order type, limitation, and operational assumption.
+- [ ] Follow the Hummingbot connector test pattern: use shared-style mocked lifecycle tests for deterministic create/cancel/status/trade behavior, and keep live exchange/API tests separate and opt-in.
+- [ ] Treat live CoW API tests with dummy wallets as smoke tests for quote, signing, posting, and classified API rejection; do not treat them as settlement/fill proof unless the account is funded and allowance is configured.
+- [ ] Keep `cowdao-cowpy` behind a narrow adapter because version `1.0.1` has package import side effects; import only required submodules and avoid executing package-level app-data network calls during Hummingbot startup.
+- [ ] Resolve CoW settlement and vault-relayer contract addresses by chain and environment; staging uses a different settlement domain than production.
 
 ## MVP: Python Hummingbot Connector
 
@@ -24,12 +28,12 @@
 - [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
 - [ ] Define MVP chain as Base mainnet only.
 - [ ] Define MVP token scope as ERC-20/WETH only.
-- [ ] Decide whether `cowdao-cowpy` is acceptable as a dependency.
+- [x] Decide whether `cowdao-cowpy` is acceptable as a dependency for the MVP adapter, with caveats documented.
 - [ ] Review `cowdao-cowpy` license compatibility.
 - [ ] Review `cowdao-cowpy` package provenance, maintained versions, pinned version ranges, transitive dependencies, vulnerability scan results, and fallback plan if it is unsuitable.
-- [ ] Add Python package structure for the CoW Swap connector.
-- [ ] Add connector configuration for supported chain IDs.
-- [ ] Add API environment configuration for production and staging.
+- [x] Add Python package structure for the CoW Swap connector.
+- [x] Add connector configuration for supported chain IDs.
+- [x] Add API environment configuration for production and staging.
 - [ ] Add Hummingbot-managed signer integration; do not store, log, or pass raw private keys through connector configuration.
 - [ ] Add per-chain configuration for Order Book API, settlement/verifying contract, and `GPv2VaultRelayer`.
 - [ ] Implement token metadata lookup and amount normalization.
@@ -38,21 +42,22 @@
 - [ ] Implement approval transaction flow to the verified `GPv2VaultRelayer` with exact or configurable capped allowances.
 - [ ] Implement allowance reset/revoke behavior where token behavior requires it.
 - [ ] Surface insufficient allowance separately from quote, signing, and settlement failures.
-- [ ] Implement quote request creation for sell orders.
-- [ ] Implement quote response parsing.
+- [x] Implement quote request creation for sell orders.
+- [x] Implement quote response parsing.
 - [ ] Implement EIP-712 order signing with per-chain domain validation, `chainId`, verifying contract, validity bounds, and replay-protection checks.
 - [ ] Verify order UID, digest, quote ID, `validTo`, and signed order fields before posting.
-- [ ] Implement order posting.
-- [ ] Store and track CoW order UID.
+- [x] Implement order posting.
+- [x] Store and track CoW order UID.
 - [ ] Map CoW order states to Hummingbot order states across quote, signed intent, posted order, accepted/open, solver settlement transaction, fills, expiration, cancellation, and rejection.
-- [ ] Poll order status by UID.
-- [ ] Poll trades/fills by order UID.
+- [x] Poll order status by UID.
+- [x] Poll trades/fills by order UID.
 - [ ] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
 - [ ] Handle expired orders.
 - [ ] Handle rejected quotes and rejected orders.
-- [ ] Add unit tests for quote mapping, order mapping, and amount conversion.
-- [ ] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
+- [x] Add unit tests for quote mapping, order mapping, and amount conversion.
+- [x] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
 - [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
+- [x] Add opt-in staging smoke test with generated dummy EOA that verifies quote/sign/post reaches CoW API and receives a classified no-funds rejection.
 - [ ] Document supported chains, order types, and limitations.
 
 ## Marlin Runtime Integration
