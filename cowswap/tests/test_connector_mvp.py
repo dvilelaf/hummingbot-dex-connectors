@@ -243,6 +243,88 @@ async def test_cancel_order_reconciles_cancelled_state(tmp_path: Path) -> None:
     assert cancelled.state is OrderState.CANCELLED
 
 
+@pytest.mark.asyncio
+async def test_poll_order_maps_partial_expired_and_failed_states(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-states",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+            partially_fillable=True,
+        )
+    )
+
+    client.status = cow_order(
+        status="open",
+        executed_sell="500000",
+        executed_buy="250000000000000000",
+    )
+    partial = await cow.poll_order(tracked.client_order_id)
+    assert partial.state is OrderState.PARTIALLY_FILLED
+
+    client.status = cow_order(
+        status="expired",
+        executed_sell="500000",
+        executed_buy="250000000000000000",
+    )
+    expired = await cow.poll_order(tracked.client_order_id)
+    assert expired.state is OrderState.EXPIRED
+
+    client.status = cow_order(status="rejected", executed_sell="0", executed_buy="0")
+    failed = await cow.poll_order(tracked.client_order_id)
+    assert failed.state is OrderState.FAILED
+
+
+@pytest.mark.asyncio
+async def test_new_connector_instance_reconciles_persisted_order_after_restart(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    store_path = tmp_path / "orders.json"
+    first = CoWConnector(
+        config=CoWConfig(
+            chain_id=8453,
+            chain_name="base",
+            owner="0x00000000000000000000000000000000000000aa",
+            receiver="0x00000000000000000000000000000000000000aa",
+            app_data="0x" + "00" * 32,
+            slippage_bps=50,
+        ),
+        client=client,
+        store=JsonOrderStore(store_path),
+    )
+    await first.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-restart",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+
+    client.status = cow_order(
+        status="fulfilled",
+        executed_sell="1000000",
+        executed_buy="500000000000000000",
+    )
+    client.trades = [cow_trade(tx_hash="0xrestart")]
+    restarted = CoWConnector(
+        config=first.config,
+        client=client,
+        store=JsonOrderStore(store_path),
+    )
+
+    reconciled = await restarted.poll_order("cid-restart")
+
+    assert reconciled.state is OrderState.FILLED
+    assert reconciled.settlement_tx_hash == "0xrestart"
+
+
 def test_json_order_store_round_trips_tracked_order(tmp_path: Path) -> None:
     store = JsonOrderStore(tmp_path / "orders.json")
     order = store.save_new(
@@ -265,6 +347,7 @@ def test_json_order_store_round_trips_tracked_order(tmp_path: Path) -> None:
 
     loaded = JsonOrderStore(tmp_path / "orders.json").load("cid-4")
 
+    assert order.state is OrderState.SUBMITTED
     assert loaded == order
 
 

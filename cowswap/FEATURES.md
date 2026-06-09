@@ -52,7 +52,7 @@
 - [x] Poll order status by UID.
 - [x] Poll trades/fills by order UID.
 - [ ] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
-- [ ] Handle expired orders.
+- [x] Handle expired orders.
 - [ ] Handle rejected quotes and rejected orders.
 - [x] Add unit tests for quote mapping, order mapping, and amount conversion.
 - [x] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
@@ -74,14 +74,14 @@
 
 ## Order Lifecycle
 
-- [ ] Support submitted order state.
+- [x] Support submitted order state.
 - [x] Support open/pending order state.
 - [x] Support full fill state.
-- [ ] Support partial fill state if available through trades.
+- [x] Support partial fill state if available through trades.
 - [x] Support canceled state.
-- [ ] Support expired state.
-- [ ] Support failed/rejected state.
-- [ ] Reconcile locally tracked orders after process restart.
+- [x] Support expired state.
+- [x] Support failed/rejected state.
+- [x] Reconcile locally tracked orders after process restart.
 - [x] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
 - [ ] Emit Hummingbot order events consistently.
 - [ ] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
