@@ -84,3 +84,15 @@ def test_signer_attaches_expected_digest_and_uid_for_signed_order() -> None:
     assert len(str(signed["order_digest"])) == 66
     assert str(signed["expected_order_uid"]).startswith(str(signed["order_digest"]))
     assert str(signed["expected_order_uid"]).endswith("713fb300")
+
+
+def test_signer_builds_signed_cancellation_payload() -> None:
+    account = Account.create()
+    signer = CowPyEip712Signer(config=config_for(account.address), account=account)
+    order_uid = "0x" + ("aa" * 32) + account.address[2:] + "713fb300"
+
+    cancellation = signer.sign_order_cancellation([order_uid])
+
+    assert cancellation["order_uids"] == (order_uid,)
+    assert str(cancellation["signature"]).startswith("0x")
+    assert cancellation["signing_scheme"] == "eip712"

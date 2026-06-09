@@ -46,6 +46,7 @@ class FakeCoWClient:
             "713fb300"
         )
         self.cancelled_uids: list[str] = []
+        self.cancellations: list[dict[str, object] | None] = []
         self.status = cow_order(status="open", executed_sell="0", executed_buy="0")
         self.trades: list[object] = []
 
@@ -83,8 +84,13 @@ class FakeCoWClient:
         assert order_uid
         return self.trades
 
-    async def cancel_order(self, order_uid: str) -> None:
+    async def cancel_order(
+        self,
+        order_uid: str,
+        cancellation: dict[str, object] | None = None,
+    ) -> None:
         self.cancelled_uids.append(order_uid)
+        self.cancellations.append(cancellation)
 
 
 def connector(tmp_path: Path, client: FakeCoWClient) -> CoWConnector:
@@ -416,6 +422,70 @@ async def test_cancel_order_reconciles_cancelled_state(tmp_path: Path) -> None:
 
     assert client.cancelled_uids == [tracked.order_uid]
     assert cancelled.state is OrderState.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_uses_signed_cancellation_when_signer_is_configured(
+    tmp_path: Path,
+) -> None:
+    account = Account.create()
+    cfg = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+        slippage_bps=50,
+    )
+    client = FakeCoWClient()
+    cow = CoWConnector(
+        config=cfg,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=cfg, account=account),
+    )
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-signed-cancel",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+    client.status = cow_order(status="cancelled", executed_sell="0", executed_buy="0")
+
+    await cow.cancel_order(tracked.client_order_id)
+
+    assert client.cancelled_uids == [tracked.order_uid]
+    assert client.cancellations[0] is not None
+    assert client.cancellations[0]["order_uids"] == (tracked.order_uid,)
+    assert str(client.cancellations[0]["signature"]).startswith("0x")
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_reconciles_settlement_race_as_filled(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-cancel-race",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+    client.status = cow_order(
+        status="fulfilled",
+        executed_sell="1000000",
+        executed_buy="500000000000000000",
+    )
+
+    cancelled = await cow.cancel_order(tracked.client_order_id)
+
+    assert client.cancelled_uids == [tracked.order_uid]
+    assert cancelled.state is OrderState.FILLED
 
 
 @pytest.mark.asyncio

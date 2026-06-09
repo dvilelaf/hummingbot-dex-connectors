@@ -52,7 +52,11 @@ class CoWClient(Protocol):
         """Fetch CoW trade/fill models for a previously posted UID."""
         ...
 
-    async def cancel_order(self, order_uid: str) -> None:
+    async def cancel_order(
+        self,
+        order_uid: str,
+        cancellation: dict[str, object] | None = None,
+    ) -> None:
         """Request cancellation for a previously posted UID."""
         ...
 
@@ -235,10 +239,35 @@ class CowDaoOrderBookClient:
             retry_delay_seconds=self._retry_delay_seconds,
         )
 
-    async def cancel_order(self, order_uid: str) -> None:
-        """Reject cancellation until signed cancellation is wired in."""
-        message = "CoW cancellation requires Hummingbot-managed signed cancellation"
-        raise NotImplementedError(message)
+    async def cancel_order(
+        self,
+        order_uid: str,
+        cancellation: dict[str, object] | None = None,
+    ) -> None:
+        """Submit a signed off-chain cancellation for a CoW order UID."""
+        if cancellation is None:
+            message = "CoW cancellation requires Hummingbot-managed signed cancellation"
+            raise NotImplementedError(message)
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.order_book.generated.model import (
+            UID,
+            EcdsaSigningScheme,
+            OrderCancellations,
+        )
+
+        await _call_order_book(
+            "cancel_order",
+            lambda: self._order_book_api().delete_order(
+                OrderCancellations(
+                    orderUids=[UID(order_uid)],
+                    signature=str(cancellation["signature"]),
+                    signingScheme=EcdsaSigningScheme.eip712,
+                )
+            ),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
+        )
 
     async def check_health(self) -> bool:
         """Return whether the cowdao-cowpy Order Book API responds."""

@@ -21,6 +21,10 @@ class OrderSigner(Protocol):
         """Return a signed order payload suitable for CoW order posting."""
         ...
 
+    def sign_order_cancellation(self, order_uids: list[str]) -> dict[str, object]:
+        """Return a signed cancellation payload for one or more CoW order UIDs."""
+        ...
+
 
 class CowPyEip712Signer:
     """EIP-712 signer implementation using cowdao-cowpy primitives."""
@@ -55,6 +59,27 @@ class CowPyEip712Signer:
             "verifying_contract": settlement_contract(self.config),
             "order_digest": "0x" + order_digest.hex(),
             "expected_order_uid": expected_order_uid,
+        }
+
+    def sign_order_cancellation(self, order_uids: list[str]) -> dict[str, object]:
+        """Sign CoW off-chain cancellation UIDs."""
+        _validate_signer_owner(self.config, self.account)
+        if not order_uids:
+            message = "order cancellation requires at least one order UID"
+            raise ValueError(message)
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.contracts.sign import SigningScheme, sign_order_cancellations
+
+        signature = sign_order_cancellations(
+            domain=_signing_domain(self.config),
+            order_uids=order_uids,
+            owner=self.account,
+            scheme=SigningScheme.EIP712,
+        )
+        return {
+            "order_uids": tuple(order_uids),
+            "signature": signature.to_string(),
+            "signing_scheme": signature.scheme.name.lower(),
         }
 
 

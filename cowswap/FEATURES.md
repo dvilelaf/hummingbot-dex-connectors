@@ -51,7 +51,7 @@
 - [ ] Map CoW order states to Hummingbot order states across quote, signed intent, posted order, accepted/open, solver settlement transaction, fills, expiration, cancellation, and rejection.
 - [x] Poll order status by UID.
 - [x] Poll trades/fills by order UID.
-- [ ] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
+- [x] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
 - [x] Handle expired orders.
 - [x] Handle rejected quotes and rejected orders.
 - [x] Add unit tests for quote mapping, order mapping, and amount conversion.

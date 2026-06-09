@@ -101,6 +101,18 @@ class MalformedUidApi:
         return SimpleNamespace(uid="0xabc")
 
 
+class CancellationApi:
+    """Fake cowpy API that captures signed cancellations."""
+
+    def __init__(self) -> None:
+        self.cancellations: list[object] = []
+
+    async def delete_order(self, cancellation: object) -> str:
+        """Capture cancellation payload."""
+        self.cancellations.append(cancellation)
+        return "ok"
+
+
 class FlakyQuoteApi:
     """Fake cowpy API that succeeds after a transient quote failure."""
 
@@ -181,6 +193,29 @@ async def test_post_sell_order_rejects_malformed_uid(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(CoWOrderBookMalformedResponseError, match="post_sell_order"):
         await client.post_sell_order(signed_order())
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_posts_signed_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Signed cancellations are sent through cowpy delete_order."""
+    api = CancellationApi()
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+    monkeypatch.setattr(client, "_api", api)
+    order_uid = "0x" + ("aa" * 32) + "00000000000000000000000000000000000000aa" + "713fb300"
+
+    await client.cancel_order(order_uid, {"signature": "0x" + "11" * 65})
+
+    assert len(api.cancellations) == 1
+    assert api.cancellations[0].orderUids[0].root == order_uid
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_requires_signed_cancellation() -> None:
+    """The cowpy-backed client does not invent cancellation signatures."""
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+
+    with pytest.raises(NotImplementedError, match="signed cancellation"):
+        await client.cancel_order("0x" + "aa" * 56)
 
 
 @pytest.mark.asyncio

@@ -86,7 +86,11 @@ class FakeClient:
         """Return no trades."""
         return []
 
-    async def cancel_order(self, _order_uid: str) -> None:
+    async def cancel_order(
+        self,
+        _order_uid: str,
+        _cancellation: dict[str, object] | None = None,
+    ) -> None:
         """Record no-op cancellation."""
 
 
