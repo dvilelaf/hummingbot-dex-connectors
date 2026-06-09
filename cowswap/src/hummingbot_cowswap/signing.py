@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Protocol
 from hummingbot_cowswap.chain_config import chain_config
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 
+ETHEREUM_ADDRESS_LENGTH = 42
+
 if TYPE_CHECKING:
     from hummingbot_cowswap.models import CoWConfig
 
@@ -29,6 +31,7 @@ class CowPyEip712Signer:
 
     def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
         """Sign a connector order payload and attach CoW signature metadata."""
+        _validate_signer_owner(self.config, self.account)
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.contracts.order import Order
         from cowdao_cowpy.contracts.sign import SigningScheme, sign_order
@@ -78,3 +81,26 @@ def _signing_domain(config: CoWConfig) -> object:
             return domain(chain, settlement_contract(config))
     message = f"unsupported CoW chain_id: {config.chain_id}"
     raise ValueError(message)
+
+
+def _validate_signer_owner(config: CoWConfig, account: object) -> None:
+    account_address = getattr(account, "address", None)
+    if account_address is None:
+        message = "signer account must expose an address"
+        raise ValueError(message)
+
+    if _normalize_address(str(account_address)) != _normalize_address(config.owner):
+        message = "signer account does not match config owner"
+        raise ValueError(message)
+
+
+def _normalize_address(address: str) -> str:
+    if not address.startswith("0x") or len(address) != ETHEREUM_ADDRESS_LENGTH:
+        message = f"invalid Ethereum address: {address}"
+        raise ValueError(message)
+    try:
+        int(address, 0)
+    except ValueError as exc:
+        message = f"invalid Ethereum address: {address}"
+        raise ValueError(message) from exc
+    return address.lower()

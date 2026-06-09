@@ -145,11 +145,12 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
 @pytest.mark.asyncio
 async def test_submit_sell_order_signs_with_cowpy_eip712_dummy_account(tmp_path: Path) -> None:
     client = FakeCoWClient()
+    account = Account.create()
     config = CoWConfig(
         chain_id=8453,
         chain_name="base",
-        owner="0x00000000000000000000000000000000000000aa",
-        receiver="0x00000000000000000000000000000000000000aa",
+        owner=account.address,
+        receiver=account.address,
         app_data="0x" + "00" * 32,
         slippage_bps=50,
     )
@@ -157,7 +158,7 @@ async def test_submit_sell_order_signs_with_cowpy_eip712_dummy_account(tmp_path:
         config=config,
         client=client,
         store=JsonOrderStore(tmp_path / "orders.json"),
-        signer=CowPyEip712Signer(config=config, account=Account.create()),
+        signer=CowPyEip712Signer(config=config, account=account),
     )
 
     await cow.submit_sell_order(
