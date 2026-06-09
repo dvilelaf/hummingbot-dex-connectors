@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
 
-from hummingbot_cowswap.models import CoWToken, OrderState, SellOrderRequest
+from hummingbot_cowswap.models import BuyOrderRequest, CoWToken, OrderState, SellOrderRequest
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -18,6 +18,7 @@ CONFIG_MAP = {
     "connector": CONNECTOR_NAME,
     "connector_name": CONNECTOR_NAME,
     "supported_order_types": SUPPORTED_ORDER_TYPES,
+    "supported_trade_types": ("BUY", "SELL"),
     "requires_all_connector_settings": False,
     "uses_raw_private_key": False,
 }
@@ -32,11 +33,15 @@ HUMMINGBOT_ORDER_STATES = {
 }
 
 
-class SellOrderConnector(Protocol):
+class OrderConnector(Protocol):
     """Connector surface needed by the shim."""
 
     async def submit_sell_order(self, request: SellOrderRequest) -> object:
         """Submit a normalized CoW sell order request."""
+        ...
+
+    async def submit_buy_order(self, request: BuyOrderRequest) -> object:
+        """Submit a normalized CoW buy order request."""
         ...
 
     async def cancel_order(self, client_order_id: str) -> object:
@@ -62,7 +67,7 @@ class HummingbotCoWAdapter:
 
     def __init__(
         self,
-        connector: SellOrderConnector,
+        connector: OrderConnector,
         tokens_by_pair: Mapping[str, tuple[CoWToken, CoWToken]],
     ) -> None:
         """Create an adapter over an existing CoW connector and configured pairs."""
@@ -155,10 +160,36 @@ class HummingbotCoWAdapter:
         self._in_flight_orders[request.client_order_id] = tracked
         return tracked
 
-    async def buy(self, *_args: object, **_kwargs: object) -> object:
-        """Reject BUY submissions until CoW buy-side semantics are designed."""
-        message = "CoW Hummingbot shim only supports SELL submissions"
-        raise NotImplementedError(message)
+    async def buy(
+        self,
+        trading_pair: str,
+        amount: Decimal | str,
+        *,
+        order_type: object = "MARKET",
+        price: Decimal | str | None = None,
+        client_order_id: str | None = None,
+        **kwargs: object,
+    ) -> object:
+        """Convert a Hummingbot-style BUY submission into a BuyOrderRequest."""
+        _reject_private_key_material(kwargs)
+        if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
+            message = f"unsupported order_type for CoW shim: {order_type}"
+            raise ValueError(message)
+        if price is not None:
+            message = "CoW shim only supports quoted market-style BUY submissions"
+            raise ValueError(message)
+        normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
+        sell_token, buy_token = self._tokens_for_pair(trading_pair)
+        request = BuyOrderRequest(
+            client_order_id=client_order_id or _new_client_order_id(normalized_pair),
+            trading_pair=normalized_pair,
+            sell_token=sell_token,
+            buy_token=buy_token,
+            amount=str(amount),
+        )
+        tracked = await self._connector.submit_buy_order(request)
+        self._in_flight_orders[request.client_order_id] = tracked
+        return tracked
 
     async def cancel(self, client_order_id: str) -> object:
         """Cancel an in-flight order by Hummingbot client order ID."""

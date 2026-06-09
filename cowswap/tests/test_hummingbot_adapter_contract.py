@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from hummingbot_cowswap import CoWToken, OrderState, SellOrderRequest, TrackedOrder
+from hummingbot_cowswap import BuyOrderRequest, CoWToken, OrderState, SellOrderRequest, TrackedOrder
 from hummingbot_cowswap.hummingbot_adapter import HummingbotCoWAdapter
 
 USDC = CoWToken(
@@ -23,10 +23,14 @@ WETH = CoWToken(
 
 class FakeConnector:
     def __init__(self) -> None:
-        self.submitted: list[SellOrderRequest] = []
+        self.submitted: list[BuyOrderRequest | SellOrderRequest] = []
         self.cancelled: list[str] = []
 
     async def submit_sell_order(self, request: SellOrderRequest) -> object:
+        self.submitted.append(request)
+        return {"client_order_id": request.client_order_id, "state": "open"}
+
+    async def submit_buy_order(self, request: BuyOrderRequest) -> object:
         self.submitted.append(request)
         return {"client_order_id": request.client_order_id, "state": "open"}
 
@@ -40,6 +44,7 @@ def test_adapter_exposes_conservative_hummingbot_contract() -> None:
 
     assert adapter.connector_name == "cowswap"
     assert adapter.config_map()["connector"] == "cowswap"
+    assert adapter.config_map()["supported_trade_types"] == ("BUY", "SELL")
     assert adapter.order_types == ("MARKET",)
     assert adapter.supported_order_types() == ("MARKET",)
     assert adapter.in_flight_orders == {}
@@ -84,20 +89,48 @@ async def test_sell_converts_hummingbot_params_to_sell_order_request() -> None:
 
 
 @pytest.mark.asyncio
+async def test_buy_converts_hummingbot_params_to_buy_order_request() -> None:
+    connector = FakeConnector()
+    adapter = HummingbotCoWAdapter(connector, {"USDC-WETH": (USDC, WETH)})
+
+    result = await adapter.buy(
+        trading_pair="usdc/weth",
+        amount=Decimal("0.5"),
+        order_type="market",
+        client_order_id="cid-buy-1",
+    )
+
+    assert result == {"client_order_id": "cid-buy-1", "state": "open"}
+    assert connector.submitted == [
+        BuyOrderRequest(
+            client_order_id="cid-buy-1",
+            trading_pair="USDC-WETH",
+            sell_token=USDC,
+            buy_token=WETH,
+            amount="0.5",
+        )
+    ]
+    assert adapter.in_flight_orders == {"cid-buy-1": result}
+
+
+@pytest.mark.asyncio
 async def test_adapter_rejects_private_keys_and_unsupported_runtime_surface() -> None:
     adapter = HummingbotCoWAdapter(FakeConnector(), {"USDC-WETH": (USDC, WETH)})
 
     with pytest.raises(ValueError, match="private key"):
         await adapter.sell("USDC-WETH", Decimal(1), private_key="0xabc")
 
-    with pytest.raises(NotImplementedError, match="SELL"):
-        await adapter.buy("USDC-WETH", Decimal(1))
+    with pytest.raises(ValueError, match="private key"):
+        await adapter.buy("USDC-WETH", Decimal(1), private_key="0xabc")
 
     with pytest.raises(ValueError, match="unsupported order_type"):
         await adapter.sell("USDC-WETH", Decimal(1), order_type="LIMIT")
 
     with pytest.raises(ValueError, match="market-style SELL"):
         await adapter.sell("USDC-WETH", Decimal(1), price=Decimal(1))
+
+    with pytest.raises(ValueError, match="market-style BUY"):
+        await adapter.buy("USDC-WETH", Decimal(1), price=Decimal(1))
 
 
 @pytest.mark.asyncio

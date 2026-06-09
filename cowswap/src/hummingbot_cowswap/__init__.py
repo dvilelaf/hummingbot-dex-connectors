@@ -15,6 +15,7 @@ from hummingbot_cowswap.errors import (
 )
 from hummingbot_cowswap.hummingbot_adapter import HummingbotCoWAdapter, HummingbotTradingRule
 from hummingbot_cowswap.models import (
+    BuyOrderRequest,
     CoWConfig,
     CoWToken,
     OrderSide,
@@ -25,6 +26,7 @@ from hummingbot_cowswap.models import (
 from hummingbot_cowswap.signing import CowPyEip712Signer
 
 __all__ = [
+    "BuyOrderRequest",
     "CoWConfig",
     "CoWConnector",
     "CoWConnectorError",
