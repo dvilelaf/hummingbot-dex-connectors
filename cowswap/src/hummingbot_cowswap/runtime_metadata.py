@@ -28,6 +28,25 @@ def connector_metadata() -> dict[str, object]:
     }
 
 
+def hummingbot_api_responses(*, symbol: str = DEFAULT_SYMBOL) -> dict[str, object]:
+    """Return local payloads matching the Hummingbot API connector discovery routes."""
+    metadata = connector_metadata()
+    return {
+        "/connectors/": [CONNECTOR_NAME],
+        f"/connectors/{CONNECTOR_NAME}/config-map": metadata["config_map"],
+        f"/connectors/{CONNECTOR_NAME}/order-types": metadata["order_types"],
+        f"/connectors/{CONNECTOR_NAME}/trading-rules?trading_pairs={symbol}": [
+            {
+                "trading_pair": symbol,
+                "min_order_size": "0",
+                "min_price_increment": "0",
+                "min_base_amount_increment": "0",
+                "min_quote_amount_increment": "0",
+            }
+        ],
+    }
+
+
 def readiness_contract(
     *,
     symbol: str = DEFAULT_SYMBOL,
@@ -142,6 +161,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="print dynamic Hummingbot API readiness contract JSON",
     )
+    output_group.add_argument(
+        "--api-responses",
+        action="store_true",
+        help="print local Hummingbot API connector discovery response JSON",
+    )
     parser.add_argument("--check", action="store_true", help="validate static metadata and exit")
     parser.add_argument(
         "--symbol",
@@ -156,6 +180,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.readiness_contract:
         _write_json(readiness_contract(symbol=args.symbol, account_name=args.account_name))
+        return 0
+    if args.api_responses:
+        _write_json(hummingbot_api_responses(symbol=args.symbol))
         return 0
     _write_json(connector_metadata())
     return 0

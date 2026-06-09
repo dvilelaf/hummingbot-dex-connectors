@@ -114,6 +114,7 @@ python -m pip install -e /path/to/hummingbot-dex-connectors/cowswap
 export HUMMINGBOT_CONNECTOR=cowswap
 export SYMBOL=USDC-WETH
 python -c "import hummingbot_cowswap"
+hummingbot-cowswap-runtime --api-responses --symbol USDC-WETH
 ```
 
 With Hummingbot API running, smoke the connector discovery surface before any

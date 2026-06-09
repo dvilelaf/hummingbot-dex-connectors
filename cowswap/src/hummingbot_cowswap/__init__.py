@@ -26,6 +26,7 @@ from hummingbot_cowswap.models import (
 from hummingbot_cowswap.runtime_metadata import (
     connector_metadata,
     evaluate_readiness,
+    hummingbot_api_responses,
     readiness_contract,
 )
 from hummingbot_cowswap.signing import CowPyEip712Signer
@@ -54,5 +55,6 @@ __all__ = [
     "UnsupportedTokenError",
     "connector_metadata",
     "evaluate_readiness",
+    "hummingbot_api_responses",
     "readiness_contract",
 ]

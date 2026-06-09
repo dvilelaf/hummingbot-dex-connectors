@@ -50,6 +50,26 @@ def test_readiness_contract_names_dynamic_api_checks_for_marlin() -> None:
     assert contract["checks"][4]["account_name"] == "cow-runtime-smoke"
 
 
+def test_hummingbot_api_responses_cover_connector_discovery_routes() -> None:
+    from hummingbot_cowswap.runtime_metadata import hummingbot_api_responses
+
+    responses = hummingbot_api_responses(symbol="USDC-WETH")
+
+    assert responses["/connectors/"] == ["cowswap"]
+    assert responses["/connectors/cowswap/order-types"] == ["MARKET"]
+    assert responses["/connectors/cowswap/config-map"]["connector"] == "cowswap"
+    assert responses["/connectors/cowswap/config-map"]["uses_raw_private_key"] is False
+    assert responses["/connectors/cowswap/trading-rules?trading_pairs=USDC-WETH"] == [
+        {
+            "trading_pair": "USDC-WETH",
+            "min_order_size": "0",
+            "min_price_increment": "0",
+            "min_base_amount_increment": "0",
+            "min_quote_amount_increment": "0",
+        }
+    ]
+
+
 def test_evaluate_readiness_fails_closed_on_missing_runtime_facts() -> None:
     from hummingbot_cowswap.runtime_metadata import evaluate_readiness
 
@@ -109,3 +129,16 @@ def test_runtime_metadata_cli_supports_docker_build_smoke() -> None:
     assert json.loads(output)["connector"] == "cowswap"
 
     subprocess.check_call([sys.executable, "-m", "hummingbot_cowswap.runtime_metadata", "--check"])
+
+    api_output = subprocess.check_output(
+        [
+            sys.executable,
+            "-m",
+            "hummingbot_cowswap.runtime_metadata",
+            "--api-responses",
+            "--symbol",
+            "USDC-WETH",
+        ],
+        text=True,
+    )
+    assert json.loads(api_output)["/connectors/"] == ["cowswap"]
