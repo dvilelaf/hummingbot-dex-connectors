@@ -15,6 +15,7 @@ from hummingbot_cowswap.errors import (
     InsufficientBalanceError,
     StaleQuoteError,
     UnsupportedChainError,
+    UnsupportedTokenError,
 )
 from hummingbot_cowswap.onchain import ApprovalPolicy, FakeEvmReader
 from hummingbot_cowswap.persistence import JsonOrderStore
@@ -144,6 +145,19 @@ async def test_submit_rejects_insufficient_allowance_separately(tmp_path: Path) 
 
     with pytest.raises(InsufficientAllowanceError):
         await cow.submit_sell_order(request())
+
+    assert client.quote_requests == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_invalid_token_before_quote(tmp_path: Path) -> None:
+    """Invalid token metadata fails before CoW API interaction."""
+    client = FakeClient()
+    invalid_token = CoWToken(symbol="BAD", address="not-an-address", decimals=18)
+    cow = connector(tmp_path, client=client)
+
+    with pytest.raises(UnsupportedTokenError):
+        await cow.submit_sell_order(request().model_copy(update={"buy_token": invalid_token}))
 
     assert client.quote_requests == []
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from time import time
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,7 @@ from hummingbot_cowswap.errors import (
     InsufficientAllowanceError,
     InsufficientBalanceError,
     StaleQuoteError,
+    UnsupportedTokenError,
 )
 from hummingbot_cowswap.models import (
     CoWConfig,
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
     from hummingbot_cowswap.signing import OrderSigner
 
 ORDER_DIGEST_HEX_LENGTH = 66
+EVM_ADDRESS_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
 
 class CoWConnector:
@@ -62,6 +65,7 @@ class CoWConnector:
         valid_to: int | None = None,
     ) -> tuple[object, str]:
         """Request a sell quote and return the quote plus slippage-adjusted minimum buy."""
+        _validate_order_tokens(sell_token, buy_token)
         quote = await self.client.quote_sell(
             {
                 "chain_id": self.config.chain_id,
@@ -82,6 +86,7 @@ class CoWConnector:
             message = f"duplicate client_order_id: {request.client_order_id}"
             raise DuplicateOrderError(message)
 
+        _validate_order_tokens(request.sell_token, request.buy_token)
         sell_amount = amount_to_atomic(request.amount, request.sell_token.decimals)
         self._preflight_sell(request.sell_token, sell_amount)
         quote, minimum_buy_amount = await self.quote_sell(
@@ -189,6 +194,20 @@ def _map_order_state(status: str, executed_sell: str, executed_buy: str) -> Orde
             return OrderState.PARTIALLY_FILLED
         return OrderState.OPEN
     return OrderState.FAILED
+
+
+def _validate_order_tokens(sell_token: CoWToken, buy_token: CoWToken) -> None:
+    _validate_token(sell_token)
+    _validate_token(buy_token)
+
+
+def _validate_token(token: CoWToken) -> None:
+    if not token.symbol.strip():
+        message = "token symbol is required"
+        raise UnsupportedTokenError(message)
+    if not EVM_ADDRESS_PATTERN.fullmatch(token.address):
+        message = f"unsupported token address for {token.symbol}: {token.address}"
+        raise UnsupportedTokenError(message)
 
 
 def _first_tx_hash(trades: list[object]) -> str | None:
