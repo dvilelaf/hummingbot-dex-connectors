@@ -10,6 +10,9 @@ dependencies = [
     "pydantic>=2,<3",
 ]
 
+[project.scripts]
+hummingbot-cowswap-runtime = "hummingbot_cowswap.runtime_metadata:main"
+
 [dependency-groups]
 dev = [
     "pyright>=1.1,<2",
@@ -50,6 +53,9 @@ ignore = [
 ]
 "src/hummingbot_cowswap/persistence.py" = [
     "PLR0913", # Persisted order metadata is intentionally explicit for restart recovery.
+]
+"src/hummingbot_cowswap/runtime_metadata.py" = [
+    "PLR0913", # Readiness evaluator keeps normalized Hummingbot API payloads explicit.
 ]
 "src/hummingbot_cowswap/signing.py" = [
     "PLC0415", # cowdao-cowpy has package import side effects; submodules are imported lazily.

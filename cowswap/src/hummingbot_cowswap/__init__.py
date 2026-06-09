@@ -23,6 +23,11 @@ from hummingbot_cowswap.models import (
     SellOrderRequest,
     TrackedOrder,
 )
+from hummingbot_cowswap.runtime_metadata import (
+    connector_metadata,
+    evaluate_readiness,
+    readiness_contract,
+)
 from hummingbot_cowswap.signing import CowPyEip712Signer
 
 __all__ = [
@@ -47,4 +52,7 @@ __all__ = [
     "TrackedOrder",
     "UnsupportedChainError",
     "UnsupportedTokenError",
+    "connector_metadata",
+    "evaluate_readiness",
+    "readiness_contract",
 ]

@@ -65,7 +65,14 @@ the same Python environment used by `uvicorn`. Acceptable patterns are:
 - a read-only bind mount provides `cowswap`, and container startup installs it
   before launching `uvicorn`.
 
-The install is valid only when `python -c "import hummingbot_cowswap"` succeeds
+The Dockerfile validates the package at build time with:
+
+```bash
+python -m hummingbot_cowswap.runtime_metadata --check
+```
+
+That check proves the package exposes static connector metadata without a Marlin
+dependency. The full install is valid only when the same command succeeds
 inside the `hummingbot-api` container and `GET /connectors/` includes
 `cowswap`. Marlin must use a container-reachable base URL such as
 `http://hummingbot-api:8000`, not `localhost`.
@@ -93,6 +100,10 @@ cd cowswap
 uv build
 python -m pip install --force-reinstall dist/hummingbot_cowswap_connector-*.whl
 python -c "import hummingbot_cowswap; print(hummingbot_cowswap.__all__)"
+python -m hummingbot_cowswap.runtime_metadata --metadata
+python -m hummingbot_cowswap.runtime_metadata --readiness-contract \
+  --symbol "${SYMBOL:-USDC-WETH}" \
+  --account-name cow-runtime-smoke
 ```
 
 For an editable local Hummingbot API checkout or container shell, install the
@@ -173,6 +184,26 @@ Marlin readiness for `cowswap` is blocked unless all checks pass:
 - `POST /trading/orders/active` for account, connector, and symbol returns no
   unmanaged active orders before submit, unless the run is explicitly configured
   to cancel and wait for them to clear.
+
+The package also exposes a static readiness contract for operators and image
+smokes:
+
+```bash
+python -m hummingbot_cowswap.runtime_metadata --readiness-contract \
+  --symbol "$SYMBOL" \
+  --account-name "$HUMMINGBOT_ACCOUNT_NAME"
+```
+
+This command does not call Marlin or Hummingbot API. It serializes the endpoint
+checks and expected connector facts that an external readiness probe must
+verify. The helper `hummingbot_cowswap.runtime_metadata.evaluate_readiness()`
+can evaluate already-normalized Hummingbot API payloads and fails closed when
+connector discovery, config-map safety, order types, trading rules, account
+connector state, or active-order guard data is missing.
+
+The package-level check cannot prove that Hummingbot API has registered the
+connector routes, that an account has loaded the connector, or that live market
+data is reachable. Those remain runtime checks against Hummingbot API.
 
 ## Contract Address Verification
 

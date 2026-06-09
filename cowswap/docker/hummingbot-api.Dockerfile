@@ -8,4 +8,5 @@ WORKDIR /opt/hummingbot-dex-connectors
 COPY cowswap ./cowswap
 
 RUN python -m pip install --no-cache-dir ./cowswap \
-    && python -c "import hummingbot_cowswap"
+    && python -c "import hummingbot_cowswap" \
+    && python -m hummingbot_cowswap.runtime_metadata --check
