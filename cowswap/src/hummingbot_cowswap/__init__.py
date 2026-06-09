@@ -10,6 +10,7 @@ from hummingbot_cowswap.errors import (
     UnsupportedChainError,
     UnsupportedTokenError,
 )
+from hummingbot_cowswap.hummingbot_adapter import HummingbotCoWAdapter, HummingbotTradingRule
 from hummingbot_cowswap.models import (
     CoWConfig,
     CoWToken,
@@ -27,6 +28,8 @@ __all__ = [
     "CoWToken",
     "CowPyEip712Signer",
     "DuplicateOrderError",
+    "HummingbotCoWAdapter",
+    "HummingbotTradingRule",
     "InsufficientAllowanceError",
     "InsufficientBalanceError",
     "OrderSide",
