@@ -44,6 +44,9 @@ ignore = [
 "src/hummingbot_cowswap/client.py" = [
     "PLC0415", # cowdao-cowpy has package import side effects; submodules are imported lazily.
 ]
+"src/hummingbot_cowswap/connector.py" = [
+    "PLR0913", # Constructor keeps runtime/test dependencies explicit.
+]
 "src/hummingbot_cowswap/persistence.py" = [
     "PLR0913", # Persisted order metadata is intentionally explicit for restart recovery.
 ]

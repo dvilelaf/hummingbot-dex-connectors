@@ -5,28 +5,28 @@
 - [ ] Follow Hummingbot Python connector architecture; do not create a standalone bot or Marlin-specific API around CoW.
 - [ ] Keep the connector in the Hummingbot API/runtime layer and expose it through standard Hummingbot connector surfaces.
 - [ ] Preserve Hummingbot connector semantics: connector name, trading pair, config map, trading rules, order types, balances, fees, client order IDs, order states, fills, cancellations, and order events.
-- [ ] Separate CoW API access, Hummingbot connector logic, order tracking, signing, persistence, and tests into clear modules.
-- [ ] Keep the CoW API client focused on Order Book API calls and response normalization.
-- [ ] Keep Hummingbot order lifecycle logic outside the low-level CoW API client.
-- [ ] Treat CoW orders as asynchronous intents, not synchronous swaps.
+- [x] Separate CoW API access, Hummingbot connector logic, order tracking, signing, persistence, and tests into clear modules.
+- [x] Keep the CoW API client focused on Order Book API calls and response normalization.
+- [x] Keep Hummingbot order lifecycle logic outside the low-level CoW API client.
+- [x] Treat CoW orders as asynchronous intents, not synchronous swaps.
 - [ ] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
 - [ ] Persist enough order metadata to recover after process restart before emitting terminal events.
 - [ ] Use Hummingbot-managed signing and credential handling; never store, log, or pass raw private keys through connector configuration.
 - [ ] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
 - [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
-- [ ] Keep configuration deterministic and environment-driven for Docker Compose packaging.
+- [x] Keep configuration deterministic and environment-driven for Docker Compose packaging.
 - [ ] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
 - [ ] Document every supported chain, token scope, order type, limitation, and operational assumption.
 - [ ] Follow the Hummingbot connector test pattern: use shared-style mocked lifecycle tests for deterministic create/cancel/status/trade behavior, and keep live exchange/API tests separate and opt-in.
-- [ ] Treat live CoW API tests with dummy wallets as smoke tests for quote, signing, posting, and classified API rejection; do not treat them as settlement/fill proof unless the account is funded and allowance is configured.
-- [ ] Keep `cowdao-cowpy` behind a narrow adapter because version `1.0.1` has package import side effects; import only required submodules and avoid executing package-level app-data network calls during Hummingbot startup.
-- [ ] Resolve CoW settlement and vault-relayer contract addresses by chain and environment; staging uses a different settlement domain than production.
+- [x] Treat live CoW API tests with dummy wallets as smoke tests for quote, signing, posting, and classified API rejection; do not treat them as settlement/fill proof unless the account is funded and allowance is configured.
+- [x] Keep `cowdao-cowpy` behind a narrow adapter because version `1.0.1` has package import side effects; import only required submodules and avoid executing package-level app-data network calls during Hummingbot startup.
+- [x] Resolve CoW settlement and vault-relayer contract addresses by chain and environment; staging uses a different settlement domain than production.
 
 ## MVP: Python Hummingbot Connector
 
 - [ ] Define connector boundary as a Python spot-style Hummingbot connector installed in the Hummingbot API/runtime layer, not imported directly by Marlin.
 - [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
-- [ ] Define MVP chain as Base mainnet only.
+- [x] Define MVP chain as Base mainnet only.
 - [ ] Define MVP token scope as ERC-20/WETH only.
 - [x] Decide whether `cowdao-cowpy` is acceptable as a dependency for the MVP adapter, with caveats documented.
 - [ ] Review `cowdao-cowpy` license compatibility.
@@ -35,13 +35,13 @@
 - [x] Add connector configuration for supported chain IDs.
 - [x] Add API environment configuration for production and staging.
 - [ ] Add Hummingbot-managed signer integration; do not store, log, or pass raw private keys through connector configuration.
-- [ ] Add per-chain configuration for Order Book API, settlement/verifying contract, and `GPv2VaultRelayer`.
-- [ ] Implement token metadata lookup and amount normalization.
-- [ ] Implement balance checks.
-- [ ] Implement ERC-20 allowance checks against the per-chain `GPv2VaultRelayer`.
-- [ ] Implement approval transaction flow to the verified `GPv2VaultRelayer` with exact or configurable capped allowances.
+- [x] Add per-chain configuration for Order Book API, settlement/verifying contract, and `GPv2VaultRelayer`.
+- [x] Implement amount normalization from configured token metadata.
+- [x] Implement balance checks.
+- [x] Implement ERC-20 allowance checks against the per-chain `GPv2VaultRelayer`.
+- [x] Implement approval transaction intent planning to the verified `GPv2VaultRelayer` with exact allowance amount.
 - [ ] Implement allowance reset/revoke behavior where token behavior requires it.
-- [ ] Surface insufficient allowance separately from quote, signing, and settlement failures.
+- [x] Surface insufficient allowance separately from quote, signing, and settlement failures.
 - [x] Implement quote request creation for sell orders.
 - [x] Implement quote response parsing.
 - [ ] Implement EIP-712 order signing with per-chain domain validation, `chainId`, verifying contract, validity bounds, and replay-protection checks.
@@ -75,26 +75,26 @@
 ## Order Lifecycle
 
 - [ ] Support submitted order state.
-- [ ] Support open/pending order state.
-- [ ] Support full fill state.
+- [x] Support open/pending order state.
+- [x] Support full fill state.
 - [ ] Support partial fill state if available through trades.
-- [ ] Support canceled state.
+- [x] Support canceled state.
 - [ ] Support expired state.
 - [ ] Support failed/rejected state.
 - [ ] Reconcile locally tracked orders after process restart.
-- [ ] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
+- [x] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
 - [ ] Emit Hummingbot order events consistently.
 - [ ] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
 
 ## Trading Features
 
-- [ ] Support `SELL` orders.
+- [x] Support `SELL` orders.
 - [ ] Evaluate whether `BUY` orders are required.
 - [ ] Support swap-style `SELL` orders from quotes, with slippage translated into limit price/minimum receive and success emitted only after settlement/fill reconciliation.
 - [ ] Defer generic limit-order support until Hummingbot order-type mapping is specified.
-- [ ] Support custom validity/expiration.
-- [ ] Support receiver address configuration.
-- [ ] Support app data or app code attribution.
+- [x] Support custom validity/expiration.
+- [x] Support receiver address configuration.
+- [x] Support app data or app code attribution.
 - [ ] Support gasless fee-in-sell-token accounting.
 - [ ] Add native ETH/Eth-flow support as a distinct feature path if required.
 
@@ -119,8 +119,8 @@
 - [ ] Add structured logging.
 - [ ] Add clear errors for unsupported tokens and chains.
 - [ ] Add health checks for Order Book API availability.
-- [ ] Add safeguards for stale quotes.
-- [ ] Add safeguards for duplicate submissions.
+- [x] Add safeguards for stale quotes.
+- [x] Add safeguards for duplicate submissions.
 - [ ] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
 - [ ] Add replay-focused signing tests for incorrect chain ID, verifying contract, validity bounds, and order UID mismatches.
 - [ ] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.

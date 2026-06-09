@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
+from hummingbot_cowswap.chain_config import chain_config
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 
 if TYPE_CHECKING:
@@ -64,9 +65,7 @@ def settlement_contract(config: CoWConfig) -> str:
     """Resolve the CoW settlement verifying contract for a config."""
     if config.settlement_contract is not None:
         return config.settlement_contract
-    if config.env == "staging":
-        return "0xf553d092b50bdcbddeD1A99aF2cA29FBE5E2CB13"
-    return "0x9008D19f58AAbD9eD0D60971565AA8510560ab41"
+    return chain_config(config.chain_id, config.env).settlement_contract
 
 
 def _signing_domain(config: CoWConfig) -> object:

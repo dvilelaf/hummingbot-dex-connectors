@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from time import time
 from typing import TYPE_CHECKING
 
+from hummingbot_cowswap.chain_config import chain_config
 from hummingbot_cowswap.client import CoWClient, CowDaoOrderBookClient
+from hummingbot_cowswap.errors import (
+    DuplicateOrderError,
+    InsufficientAllowanceError,
+    InsufficientBalanceError,
+    StaleQuoteError,
+)
 from hummingbot_cowswap.models import (
     CoWConfig,
     CoWToken,
@@ -16,6 +24,9 @@ from hummingbot_cowswap.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from hummingbot_cowswap.onchain import EvmReader
     from hummingbot_cowswap.persistence import JsonOrderStore
     from hummingbot_cowswap.signing import OrderSigner
 
@@ -32,12 +43,16 @@ class CoWConnector:
         store: JsonOrderStore,
         client: CoWClient | None = None,
         signer: OrderSigner | None = None,
+        evm_reader: EvmReader | None = None,
+        clock: Callable[[], float] = time,
     ) -> None:
         """Create a connector with injected API client, store, and optional signer."""
         self.config = config
         self.client = client or CowDaoOrderBookClient(config)
         self.store = store
         self.signer = signer
+        self.evm_reader = evm_reader
+        self.clock = clock
 
     async def quote_sell(
         self,
@@ -63,12 +78,22 @@ class CoWConnector:
 
     async def submit_sell_order(self, request: SellOrderRequest) -> TrackedOrder:
         """Quote, optionally sign, post, persist, and return a tracked sell order."""
+        if self.store.load(request.client_order_id) is not None:
+            message = f"duplicate client_order_id: {request.client_order_id}"
+            raise DuplicateOrderError(message)
+
+        sell_amount = amount_to_atomic(request.amount, request.sell_token.decimals)
+        self._preflight_sell(request.sell_token, sell_amount)
         quote, minimum_buy_amount = await self.quote_sell(
             request.sell_token,
             request.buy_token,
             request.amount,
             request.valid_to,
         )
+        quote_valid_to = _quote_valid_to(quote)
+        if quote_valid_to <= int(self.clock()):
+            message = f"stale CoW quote valid_to={quote_valid_to}"
+            raise StaleQuoteError(message)
         order_payload = {
             "chain_id": self.config.chain_id,
             "sell_token": request.sell_token.address,
@@ -78,7 +103,7 @@ class CoWConnector:
             "sell_amount": _quote_sell_amount(quote),
             "buy_amount": minimum_buy_amount,
             "fee_amount": "0",
-            "valid_to": _quote_valid_to(quote),
+            "valid_to": quote_valid_to,
             "quote_id": _quote_id(quote),
             "app_data": self.config.app_data,
             "kind": "sell",
@@ -99,7 +124,7 @@ class CoWConnector:
             buy_token=request.buy_token,
             sell_amount=_quote_sell_amount(quote),
             buy_amount=minimum_buy_amount,
-            valid_to=_quote_valid_to(quote),
+            valid_to=quote_valid_to,
             quote_id=_quote_id(quote),
             digest=_digest_from_uid(order_uid),
             signing_scheme="eip712",
@@ -134,6 +159,21 @@ class CoWConnector:
             message = f"unknown client_order_id: {client_order_id}"
             raise KeyError(message)
         return tracked
+
+    def _preflight_sell(self, sell_token: CoWToken, sell_amount: str) -> None:
+        chain = chain_config(self.config.chain_id, self.config.env)
+        if self.evm_reader is None:
+            return
+
+        balance = self.evm_reader.balance_of(sell_token, self.config.owner)
+        if int(balance) < int(sell_amount):
+            message = f"insufficient {sell_token.symbol} balance"
+            raise InsufficientBalanceError(message)
+
+        allowance = self.evm_reader.allowance(sell_token, self.config.owner, chain.vault_relayer)
+        if int(allowance) < int(sell_amount):
+            message = f"insufficient {sell_token.symbol} allowance for CoW VaultRelayer"
+            raise InsufficientAllowanceError(message)
 
 
 def _map_order_state(status: str, executed_sell: str, executed_buy: str) -> OrderState:
