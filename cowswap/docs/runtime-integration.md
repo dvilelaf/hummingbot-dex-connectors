@@ -174,6 +174,68 @@ Marlin readiness for `cowswap` is blocked unless all checks pass:
   unmanaged active orders before submit, unless the run is explicitly configured
   to cancel and wait for them to clear.
 
+## Contract Address Verification
+
+`hummingbot_cowswap.chain_config` verifies configured CoW core addresses before
+use. The checks cover supported chain ID, environment, EIP-55 checksum, official
+source metadata, ABI expectations, non-proxy status for the configured
+contracts, and optional deployed runtime bytecode.
+
+Official sources used by the verifier:
+
+- CoW SDK config contract addresses:
+  https://cowprotocol-cow-sdk.mintlify.app/api/config
+- CoW supported networks and deterministic core deployments:
+  https://cowswap.mintlify.app/cow-contracts/deployment/networks
+- `GPv2Settlement` ABI behavior:
+  https://cowswap.mintlify.app/cow-protocol/reference/contracts/core/settlement
+- `GPv2VaultRelayer` ABI behavior:
+  https://cowswap.mintlify.app/cow-contracts/contracts/vault-relayer
+
+For live deployed-code verification, fetch bytecode with any trusted RPC for
+the configured chain and pass the result into
+`verify_configured_contract_addresses`. Example:
+
+```bash
+cd cowswap
+RPC_URL=https://base-rpc.publicnode.com
+uv run python - <<'PY'
+import json
+import os
+import urllib.request
+
+from hummingbot_cowswap.chain_config import chain_config, verify_configured_contract_addresses
+
+config = chain_config(8453, "prod")
+code_by_address = {}
+for address in (config.settlement_contract, config.vault_relayer):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_getCode",
+        "params": [address, "latest"],
+    }
+    request = urllib.request.Request(
+        os.environ["RPC_URL"],
+        data=json.dumps(payload).encode(),
+        headers={
+            "content-type": "application/json",
+            "user-agent": "hummingbot-cowswap-verifier/0.1",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+        code_by_address[address] = json.load(response)["result"]
+
+verify_configured_contract_addresses(config, code_by_address)
+print("verified")
+PY
+```
+
+The optional live check validates non-empty runtime code, minimum code size,
+known runtime code hashes for the selected chain/environment, and required
+`GPv2Settlement` ABI selectors. It intentionally does not add an RPC framework
+to the connector runtime.
+
 ## Asynchronous Order Evidence
 
 CoW orders are signed intents submitted to an off-chain order book. A submitted

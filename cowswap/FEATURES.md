@@ -21,7 +21,3 @@
 
 - [ ] Support swap-style `SELL` orders from quotes, with slippage translated into limit price/minimum receive and success emitted only after settlement/fill reconciliation.
 - [ ] Add native ETH/Eth-flow support as a distinct feature path if required.
-
-## Additional Chain Support
-
-- [ ] Verify configured contract addresses by chain ID, checksum, deployed code, ABI compatibility, proxy status where applicable, and official sources.
