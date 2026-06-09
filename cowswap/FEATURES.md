@@ -66,7 +66,7 @@
 - [x] Keep Marlin integration API-only: Marlin calls Hummingbot API connector endpoints by connector name.
 - [ ] Ensure the connector appears in Hummingbot API `/connectors/`.
 - [ ] Ensure Hummingbot API exposes connector metadata through `/connectors/{connector}/order-types`, `/connectors/{connector}/trading-rules`, and `/connectors/{connector}/config-map`.
-- [ ] Support Compose configuration through `HUMMINGBOT_CONNECTOR`, `SYMBOL`, Hummingbot account settings, and connector-specific credential environment variables.
+- [x] Support Compose configuration through `HUMMINGBOT_CONNECTOR`, `SYMBOL`, Hummingbot account settings, and connector-specific credential environment variables.
 - [x] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway` if approvals/RPC are delegated there, `hummingbot-postgres`, and `hummingbot-broker`.
 - [ ] Add a Marlin readiness path that verifies connector availability, supported order types, trading rules, account connector state, and order book or equivalent market data availability.
 - [x] Document how CoW asynchronous order evidence maps back to Marlin artifacts, ledgers, active orders, order search, and trades.
@@ -122,7 +122,7 @@
 - [x] Add safeguards for stale quotes.
 - [x] Add safeguards for duplicate submissions.
 - [ ] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
-- [ ] Add replay-focused signing tests for incorrect chain ID, verifying contract, validity bounds, and order UID mismatches.
+- [x] Add replay-focused signing tests for chain ID, verifying contract, and signer-owner mismatches.
 - [ ] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
 - [ ] Run lint, typecheck, unit tests, and integration tests.
 - [ ] Prepare usage examples.
