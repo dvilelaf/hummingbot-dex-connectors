@@ -6,6 +6,11 @@ import type {
 } from '../types.js';
 
 export function quoteToDto(quote: AerodromeQuote): AerodromeQuoteDto {
+  const routePath = [
+    quote.tokenIn.symbol,
+    ...quote.routes.slice(0, -1).map((route) => route.to),
+    quote.tokenOut.symbol,
+  ].join(' -> ');
   return {
     quoteId: quote.quoteId,
     tokenIn: quote.tokenIn.address,
@@ -19,8 +24,10 @@ export function quoteToDto(quote: AerodromeQuote): AerodromeQuoteDto {
     maxAmountIn: quote.amountIn,
     price: quote.price,
     priceImpactPct: quote.priceImpactPct,
-    routePath: `${quote.tokenIn.symbol} -> ${quote.tokenOut.symbol}`,
+    routePath,
     poolAddress: quote.poolAddress,
+    poolAddresses: quote.poolAddresses,
+    routePoolTypes: quote.routePoolTypes,
     poolType: quote.poolType,
     expiresAt: quote.expiresAt,
   };

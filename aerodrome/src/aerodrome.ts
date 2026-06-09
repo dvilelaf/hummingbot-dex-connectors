@@ -2,7 +2,7 @@ import { Interface } from '@ethersproject/abi';
 import { getAddress } from '@ethersproject/address';
 import { BigNumber } from '@ethersproject/bignumber';
 
-import { aerodromeBaseConfig } from './config.js';
+import { aerodromeBaseConfig, BASE_TOKENS } from './config.js';
 import {
   ERC20_ABI,
   FACTORY_REGISTRY_ABI,
@@ -31,6 +31,7 @@ import type {
   ExecuteSwapRequest,
   PlannedTransaction,
   PoolMetadata,
+  PoolType,
   QuoteSwapRequest,
   TokenInfo,
 } from './types.js';
@@ -41,6 +42,7 @@ import {
   decimalRatio,
   decimalAmount,
   hasDeployedCode,
+  isNativeEth,
   nonZeroAddress,
   safeIntegerTimestamp,
   stableFlag,
@@ -48,6 +50,7 @@ import {
 } from './utils.js';
 
 const DEFAULT_GAS = BigNumber.from('250000');
+const POOL_TYPES = ['volatile', 'stable'] as const;
 
 export class Aerodrome {
   private readonly routerInterface = new Interface(ROUTER_ABI);
@@ -73,15 +76,16 @@ export class Aerodrome {
       throw new QuoteError('amount must be greater than zero');
     }
 
-    const route = this.route(normalized.tokenIn, normalized.tokenOut, normalized.poolType);
-    const poolAddress = await this.poolFor(route);
-    const factoryPool = await this.factoryPool(route);
-    if (factoryPool !== poolAddress) {
-      throw new PoolValidationError('Router poolFor and PoolFactory getPool disagree');
-    }
-    await this.validatePool(poolAddress, route);
-
-    const amountOutAtomic = await this.getAmountsOut(amountInAtomic, route);
+    const selected = await this.bestRoute(
+      normalized.tokenIn,
+      normalized.tokenOut,
+      normalized.routeTokenIn,
+      normalized.routeTokenOut,
+      normalized.poolType,
+      normalized.maxHops,
+      amountInAtomic,
+    );
+    const amountOutAtomic = selected.amountOutAtomic;
     if (amountOutAtomic.isZero()) {
       throw new QuoteError('Aerodrome quote returned zero output');
     }
@@ -91,6 +95,14 @@ export class Aerodrome {
     if (minAmountOutAtomic.isZero()) {
       throw new QuoteError('Aerodrome minimum output is zero');
     }
+    const route = selected.routes[0];
+    const poolAddress = selected.poolAddresses[0];
+    if (route === undefined || poolAddress === undefined) {
+      throw new QuoteError('Aerodrome route selection returned no route');
+    }
+    const routePoolTypes = selected.routes.map((selectedRoute) =>
+      this.poolTypeForRoute(selectedRoute),
+    );
     const quote: AerodromeQuote = {
       quoteId: crypto.randomUUID(),
       tokenIn: normalized.tokenIn,
@@ -109,8 +121,11 @@ export class Aerodrome {
       ),
       priceImpactPct: null,
       route,
+      routes: selected.routes,
       poolAddress,
-      poolType: normalized.poolType,
+      poolAddresses: selected.poolAddresses,
+      routePoolTypes,
+      poolType: this.selectedPoolType(routePoolTypes),
       expiresAt: this.now() + this.config.defaultTtlSeconds,
     };
     this.quoteCache.set(quote.quoteId, {
@@ -219,31 +234,21 @@ export class Aerodrome {
     if (deadline <= this.now()) {
       throw new TransactionPreflightError('deadline must be in the future');
     }
-    const currentAmountOut = await this.getAmountsOut(quote.amountInAtomic, quote.route);
+    const currentAmountOut = await this.getAmountsOut(quote.amountInAtomic, quote.routes);
     if (currentAmountOut.lt(quote.minAmountOutAtomic)) {
       throw new TransactionPreflightError('current Aerodrome output is below quoted minimum');
     }
-    const currentBalance = await this.balance(walletAddress, quote.tokenIn);
+    const currentBalance = await this.balanceForSwap(walletAddress, quote.tokenIn);
     if (currentBalance.lt(quote.amountInAtomic)) {
       throw new BalanceError('wallet balance is below Aerodrome swap amount');
     }
-    const currentAllowance = await this.allowance(walletAddress, quote.tokenIn);
-    const approval = currentAllowance.lt(quote.amountInAtomic)
-      ? this.buildApprovalTransaction(walletAddress, quote.tokenIn, quote.amountInAtomic)
-      : undefined;
-
-    const data = this.routerInterface.encodeFunctionData('swapExactTokensForTokens', [
-      quote.amountInAtomic,
-      quote.minAmountOutAtomic,
-      [quote.route],
-      recipient,
-      deadline,
-    ]);
+    const approval = await this.approvalForSwap(walletAddress, quote);
+    const data = this.swapCalldata(quote, recipient, deadline);
     const transaction = {
       to: this.config.contracts.router,
       from: walletAddress,
       data,
-      value: BigNumber.from(0),
+      value: isNativeEth(quote.tokenIn) ? quote.amountInAtomic : BigNumber.from(0),
     };
     const gasEstimate = await this.provider.estimateGas(transaction);
     return {
@@ -260,34 +265,59 @@ export class Aerodrome {
   private async normalizeQuoteRequest(request: QuoteSwapRequest): Promise<{
     readonly tokenIn: TokenInfo;
     readonly tokenOut: TokenInfo;
+    readonly routeTokenIn: TokenInfo;
+    readonly routeTokenOut: TokenInfo;
     readonly amount: string;
     readonly poolType: QuoteSwapRequest['poolType'];
+    readonly maxHops: 1 | 2;
     readonly slippageBps?: number;
   }> {
     if (request.side !== 'SELL') {
-      throw new QuoteError('Aerodrome basic Router MVP supports SELL exact-input swaps only');
+      throw new QuoteError('Aerodrome basic Router does not support BUY exact-output swaps');
     }
     const baseToken = await this.resolveToken(request.baseToken);
     const quoteToken = await this.resolveToken(request.quoteToken);
     if (baseToken.address === quoteToken.address) {
       throw new QuoteError('Aerodrome swap tokens must be different');
     }
+    const routeTokenIn = await this.routeToken(baseToken);
+    const routeTokenOut = await this.routeToken(quoteToken);
+    if (routeTokenIn.address === routeTokenOut.address) {
+      throw new QuoteError('Aerodrome swap route tokens must be different');
+    }
+    const maxHops = this.maxHops(request.maxHops);
     const normalized: {
       readonly tokenIn: TokenInfo;
       readonly tokenOut: TokenInfo;
+      readonly routeTokenIn: TokenInfo;
+      readonly routeTokenOut: TokenInfo;
       readonly amount: string;
       readonly poolType: QuoteSwapRequest['poolType'];
+      readonly maxHops: 1 | 2;
       readonly slippageBps?: number;
     } = {
       tokenIn: baseToken,
       tokenOut: quoteToken,
+      routeTokenIn,
+      routeTokenOut,
       amount: request.amount,
       poolType: request.poolType,
+      maxHops,
     };
     if (request.slippageBps === undefined) {
       return normalized;
     }
     return { ...normalized, slippageBps: request.slippageBps };
+  }
+
+  private maxHops(maxHops: QuoteSwapRequest['maxHops']): 1 | 2 {
+    if (maxHops === undefined) {
+      return 2;
+    }
+    if (maxHops === 1 || maxHops === 2) {
+      return maxHops;
+    }
+    throw new TransactionPreflightError('maxHops must be 1 or 2');
   }
 
   private route(
@@ -301,6 +331,109 @@ export class Aerodrome {
       stable: stableFlag(poolType),
       factory: this.config.contracts.poolFactory,
     };
+  }
+
+  private poolTypeForRoute(route: AerodromeRoute): PoolType {
+    return route.stable ? 'stable' : 'volatile';
+  }
+
+  private selectedPoolType(routePoolTypes: readonly PoolType[]): PoolType | 'mixed' {
+    const first = routePoolTypes[0];
+    if (first === undefined) {
+      return 'mixed';
+    }
+    return routePoolTypes.every((poolType) => poolType === first) ? first : 'mixed';
+  }
+
+  private async bestRoute(
+    tokenIn: TokenInfo,
+    tokenOut: TokenInfo,
+    routeTokenIn: TokenInfo,
+    routeTokenOut: TokenInfo,
+    poolType: QuoteSwapRequest['poolType'],
+    maxHops: 1 | 2,
+    amountInAtomic: BigNumber,
+  ): Promise<{
+    readonly routes: readonly AerodromeRoute[];
+    readonly poolAddresses: readonly string[];
+    readonly amountOutAtomic: BigNumber;
+  }> {
+    const candidates = this.routeCandidates(routeTokenIn, routeTokenOut, poolType, maxHops);
+    let best:
+      | {
+          readonly routes: readonly AerodromeRoute[];
+          readonly poolAddresses: readonly string[];
+          readonly amountOutAtomic: BigNumber;
+        }
+      | undefined;
+    let lastError: Error | undefined;
+
+    for (const routes of candidates) {
+      try {
+        const poolAddresses = await this.validateRoutes(routes);
+        const amountOutAtomic = await this.getAmountsOut(amountInAtomic, routes);
+        if (amountOutAtomic.isZero()) {
+          continue;
+        }
+        if (best === undefined || amountOutAtomic.gt(best.amountOutAtomic)) {
+          best = { routes, poolAddresses, amountOutAtomic };
+        }
+      } catch (error) {
+        if (error instanceof PoolValidationError || error instanceof QuoteError) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (best === undefined) {
+      throw (
+        lastError ?? new QuoteError(`no Aerodrome route for ${tokenIn.symbol}/${tokenOut.symbol}`)
+      );
+    }
+    return best;
+  }
+
+  private routeCandidates(
+    tokenIn: TokenInfo,
+    tokenOut: TokenInfo,
+    poolType: QuoteSwapRequest['poolType'],
+    maxHops: 1 | 2,
+  ): readonly (readonly AerodromeRoute[])[] {
+    const direct = [this.route(tokenIn, tokenOut, poolType)];
+    if (maxHops === 1) {
+      return [direct];
+    }
+    const intermediates = Object.values(BASE_TOKENS).filter(
+      (token) =>
+        !isNativeEth(token) &&
+        token.address !== tokenIn.address &&
+        token.address !== tokenOut.address,
+    );
+    const twoHop = intermediates.flatMap((intermediate) =>
+      POOL_TYPES.flatMap((firstPoolType) =>
+        POOL_TYPES.map((secondPoolType) => [
+          this.route(tokenIn, intermediate, firstPoolType),
+          this.route(intermediate, tokenOut, secondPoolType),
+        ]),
+      ),
+    );
+    return [direct, ...twoHop];
+  }
+
+  private async validateRoutes(routes: readonly AerodromeRoute[]): Promise<readonly string[]> {
+    const poolAddresses: string[] = [];
+    for (const route of routes) {
+      const poolAddress = await this.poolFor(route);
+      const factoryPool = await this.factoryPool(route);
+      if (factoryPool !== poolAddress) {
+        throw new PoolValidationError('Router poolFor and PoolFactory getPool disagree');
+      }
+      await this.validatePool(poolAddress, route);
+      poolAddresses.push(poolAddress);
+    }
+    return poolAddresses;
   }
 
   private async assertNetwork(): Promise<void> {
@@ -460,15 +593,18 @@ export class Aerodrome {
     }
   }
 
-  private async getAmountsOut(amountIn: BigNumber, route: AerodromeRoute): Promise<BigNumber> {
+  private async getAmountsOut(
+    amountIn: BigNumber,
+    routes: readonly AerodromeRoute[],
+  ): Promise<BigNumber> {
     const raw = await this.provider.call({
       to: this.config.contracts.router,
-      data: this.routerInterface.encodeFunctionData('getAmountsOut', [amountIn, [route]]),
+      data: this.routerInterface.encodeFunctionData('getAmountsOut', [amountIn, routes]),
     });
     try {
       const decoded = this.routerInterface.decodeFunctionResult('getAmountsOut', raw);
       const amounts = decoded[0] as readonly BigNumber[];
-      const amountOut = amounts[1];
+      const amountOut = amounts[routes.length];
       if (amountOut === undefined) {
         throw new QuoteError('Aerodrome Router returned malformed amounts');
       }
@@ -483,6 +619,12 @@ export class Aerodrome {
 
   private async resolveToken(token: TokenInfo): Promise<TokenInfo> {
     const normalized = validateToken(token);
+    if (isNativeEth(normalized)) {
+      if (normalized.decimals !== 18) {
+        throw new UnsupportedTokenError('native ETH must use 18 decimals');
+      }
+      return normalized;
+    }
     await this.assertContractCode(normalized.address, `${normalized.symbol} token`);
     const raw = await this.provider.call({
       to: normalized.address,
@@ -503,13 +645,79 @@ export class Aerodrome {
     }
   }
 
-  private async validateCachedQuoteRoute(quote: AerodromeQuote): Promise<void> {
-    const poolAddress = await this.poolFor(quote.route);
-    const factoryPool = await this.factoryPool(quote.route);
-    if (poolAddress !== quote.poolAddress || factoryPool !== quote.poolAddress) {
-      throw new PoolValidationError('cached Aerodrome quote pool no longer matches route');
+  private async routeToken(token: TokenInfo): Promise<TokenInfo> {
+    if (!isNativeEth(token)) {
+      return token;
     }
-    await this.validatePool(quote.poolAddress, quote.route);
+    return this.resolveToken({
+      symbol: 'WETH',
+      address: this.config.contracts.weth,
+      decimals: 18,
+    });
+  }
+
+  private async balanceForSwap(owner: string, token: TokenInfo): Promise<BigNumber> {
+    if (!isNativeEth(token)) {
+      return this.balance(owner, token);
+    }
+    if (this.provider.getBalance === undefined) {
+      throw new BalanceError('provider does not support native ETH balance checks');
+    }
+    try {
+      return await this.provider.getBalance(nonZeroAddress(owner, 'owner'));
+    } catch {
+      throw new BalanceError('malformed native ETH balance response');
+    }
+  }
+
+  private async approvalForSwap(
+    walletAddress: string,
+    quote: AerodromeQuote,
+  ): Promise<PlannedTransaction | undefined> {
+    if (isNativeEth(quote.tokenIn)) {
+      return undefined;
+    }
+    const currentAllowance = await this.allowance(walletAddress, quote.tokenIn);
+    return currentAllowance.lt(quote.amountInAtomic)
+      ? this.buildApprovalTransaction(walletAddress, quote.tokenIn, quote.amountInAtomic)
+      : undefined;
+  }
+
+  private swapCalldata(quote: AerodromeQuote, recipient: string, deadline: number): string {
+    if (isNativeEth(quote.tokenIn)) {
+      return this.routerInterface.encodeFunctionData('swapExactETHForTokens', [
+        quote.minAmountOutAtomic,
+        quote.routes,
+        recipient,
+        deadline,
+      ]);
+    }
+    if (isNativeEth(quote.tokenOut)) {
+      return this.routerInterface.encodeFunctionData('swapExactTokensForETH', [
+        quote.amountInAtomic,
+        quote.minAmountOutAtomic,
+        quote.routes,
+        recipient,
+        deadline,
+      ]);
+    }
+    return this.routerInterface.encodeFunctionData('swapExactTokensForTokens', [
+      quote.amountInAtomic,
+      quote.minAmountOutAtomic,
+      quote.routes,
+      recipient,
+      deadline,
+    ]);
+  }
+
+  private async validateCachedQuoteRoute(quote: AerodromeQuote): Promise<void> {
+    const poolAddresses = await this.validateRoutes(quote.routes);
+    if (
+      poolAddresses.length !== quote.poolAddresses.length ||
+      poolAddresses.some((poolAddress, index) => poolAddress !== quote.poolAddresses[index])
+    ) {
+      throw new PoolValidationError('cached Aerodrome quote pools no longer match route');
+    }
   }
 
   private cloneQuote(quote: AerodromeQuote): AerodromeQuote {
@@ -518,6 +726,9 @@ export class Aerodrome {
       tokenIn: { ...quote.tokenIn },
       tokenOut: { ...quote.tokenOut },
       route: { ...quote.route },
+      routes: quote.routes.map((route) => ({ ...route })),
+      poolAddresses: [...quote.poolAddresses],
+      routePoolTypes: [...quote.routePoolTypes],
     };
   }
 
@@ -525,6 +736,12 @@ export class Aerodrome {
     Object.freeze(quote.tokenIn);
     Object.freeze(quote.tokenOut);
     Object.freeze(quote.route);
+    for (const route of quote.routes) {
+      Object.freeze(route);
+    }
+    Object.freeze(quote.routes);
+    Object.freeze(quote.poolAddresses);
+    Object.freeze(quote.routePoolTypes);
     return Object.freeze(quote);
   }
 

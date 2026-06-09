@@ -24,8 +24,14 @@ Before upstreaming to Hummingbot Gateway:
 
 Known deliberate MVP limits:
 
-- `BUY` exact-output is unsupported. Add a deliberate exact-output strategy
-  before exposing `BUY`.
+- `BUY` exact-output is unsupported. Aerodrome's basic Router interface exposes
+  exact-input quote and swap methods (`getAmountsOut`,
+  `swapExactTokensForTokens`, `swapExactETHForTokens`, and
+  `swapExactTokensForETH`) but no `getAmountsIn` or `swapTokensForExactTokens`
+  equivalent. Do not expose Hummingbot `BUY` until a safe exact-output ABI path
+  is selected and tested.
+- `UNSAFE_swapExactTokensForTokens` is not a `BUY` fallback because it relies on
+  caller-supplied amount arrays and does not guarantee exact-output semantics.
 - `priceImpactPct` is unavailable in the MVP and is exposed as `null`.
 - Slipstream, AMM liquidity, CLMM positions, gauges, voting, and emissions are
   out of scope for this router-only MVP.

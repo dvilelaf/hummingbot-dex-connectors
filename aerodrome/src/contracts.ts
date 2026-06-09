@@ -4,6 +4,8 @@ export const ROUTER_ABI = [
   'function poolFor(address tokenA,address tokenB,bool stable,address factory) view returns (address pool)',
   'function getAmountsOut(uint256 amountIn,tuple(address from,address to,bool stable,address factory)[] routes) view returns (uint256[] amounts)',
   'function swapExactTokensForTokens(uint256 amountIn,uint256 amountOutMin,tuple(address from,address to,bool stable,address factory)[] routes,address to,uint256 deadline) returns (uint256[] amounts)',
+  'function swapExactETHForTokens(uint256 amountOutMin,tuple(address from,address to,bool stable,address factory)[] routes,address to,uint256 deadline) payable returns (uint256[] amounts)',
+  'function swapExactTokensForETH(uint256 amountIn,uint256 amountOutMin,tuple(address from,address to,bool stable,address factory)[] routes,address to,uint256 deadline) returns (uint256[] amounts)',
 ] as const;
 
 export const FACTORY_REGISTRY_ABI = [

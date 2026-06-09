@@ -1,7 +1,10 @@
 import type { BigNumber } from '@ethersproject/bignumber';
 
+// Hummingbot-style BUY is exact-output. Aerodrome basic Router support is
+// intentionally rejected until a safe exact-output ABI path exists.
 export type SwapSide = 'BUY' | 'SELL';
 export type PoolType = 'stable' | 'volatile';
+export type SelectedPoolType = PoolType | 'mixed';
 
 export interface TokenInfo {
   readonly symbol: string;
@@ -35,6 +38,7 @@ export interface AerodromeRoute {
 export interface AerodromeProvider {
   readonly getNetwork: () => Promise<{ readonly chainId: number }>;
   readonly getCode: (address: string) => Promise<string>;
+  readonly getBalance?: (address: string) => Promise<BigNumber>;
   readonly call: (transaction: Readonly<CallRequest>) => Promise<string>;
   readonly estimateGas: (transaction: Readonly<TransactionRequest>) => Promise<BigNumber>;
 }
@@ -55,6 +59,7 @@ export interface QuoteSwapRequest {
   readonly amount: string;
   readonly side: SwapSide;
   readonly poolType: PoolType;
+  readonly maxHops?: 1 | 2;
   readonly slippageBps?: number;
   readonly walletAddress?: string;
   readonly recipient?: string;
@@ -85,8 +90,11 @@ export interface AerodromeQuote {
   readonly price: string;
   readonly priceImpactPct: string | null;
   readonly route: AerodromeRoute;
+  readonly routes: readonly AerodromeRoute[];
   readonly poolAddress: string;
-  readonly poolType: PoolType;
+  readonly poolAddresses: readonly string[];
+  readonly routePoolTypes: readonly PoolType[];
+  readonly poolType: SelectedPoolType;
   readonly expiresAt: number;
 }
 
@@ -134,7 +142,9 @@ export interface AerodromeQuoteDto {
   readonly priceImpactPct: string | null;
   readonly routePath: string;
   readonly poolAddress: string;
-  readonly poolType: PoolType;
+  readonly poolAddresses: readonly string[];
+  readonly routePoolTypes: readonly PoolType[];
+  readonly poolType: SelectedPoolType;
   readonly expiresAt: number;
 }
 

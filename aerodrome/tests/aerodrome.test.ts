@@ -48,6 +48,8 @@ import {
 const OWNER = getAddress('0x00000000000000000000000000000000000000aa');
 const RECIPIENT = getAddress('0x00000000000000000000000000000000000000bb');
 const POOL = getAddress('0x1111111111111111111111111111111111111111');
+const AERO_POOL = getAddress('0x2222222222222222222222222222222222222222');
+const WETH_POOL = getAddress('0x3333333333333333333333333333333333333333');
 const ONE_USDC = BigNumber.from('1000000');
 const HALF_WETH = BigNumber.from('500000000000000000');
 
@@ -67,6 +69,8 @@ class FakeProvider implements AerodromeProvider {
     BASE_TOKENS.WETH.address,
     BASE_TOKENS.AERO.address,
     POOL,
+    AERO_POOL,
+    WETH_POOL,
   ]);
   public factoryApproved = true;
   public defaultFactory = BASE_MAINNET.contracts.poolFactory;
@@ -80,13 +84,16 @@ class FakeProvider implements AerodromeProvider {
   public token0 = BASE_TOKENS.USDC.address;
   public token1 = BASE_TOKENS.WETH.address;
   public amountOut = HALF_WETH;
+  public amountOutByRouteLength = new Map<number, BigNumber>();
   public malformedAmounts = false;
   public allowanceAmount = ONE_USDC;
   public balanceAmount = ONE_USDC;
+  public nativeBalanceAmount = HALF_WETH;
   public usdcDecimals = 6;
   public wethDecimals = 18;
   public gasEstimate = BigNumber.from('180000');
   public readonly malformedCalls = new Set<string>();
+  public readonly calls: CallRequest[] = [];
   public readonly estimated: TransactionRequest[] = [];
 
   public getNetwork(): Promise<{ readonly chainId: number }> {
@@ -98,6 +105,7 @@ class FakeProvider implements AerodromeProvider {
   }
 
   public call(transaction: Readonly<CallRequest>): Promise<string> {
+    this.calls.push({ ...transaction });
     const data = transaction.data;
     const routerCall = parse(routerInterface, data);
     if (routerCall !== undefined) {
@@ -120,14 +128,14 @@ class FakeProvider implements AerodromeProvider {
       if (this.malformedCalls.has(`factory:${factoryCall.name}`)) {
         return Promise.resolve('0x');
       }
-      return Promise.resolve(this.handleFactory(factoryCall.name));
+      return Promise.resolve(this.handleFactory(factoryCall.name, factoryCall.args));
     }
     const poolCall = parse(poolInterface, data);
     if (poolCall !== undefined) {
       if (this.malformedCalls.has(`pool:${poolCall.name}`)) {
         return Promise.resolve('0x');
       }
-      return Promise.resolve(this.handlePool(poolCall.name));
+      return Promise.resolve(this.handlePool(poolCall.name, transaction.to));
     }
     const erc20Call = parse(erc20Interface, data);
     if (erc20Call !== undefined) {
@@ -144,6 +152,10 @@ class FakeProvider implements AerodromeProvider {
     return Promise.resolve(this.gasEstimate);
   }
 
+  public getBalance(): Promise<BigNumber> {
+    return Promise.resolve(this.nativeBalanceAmount);
+  }
+
   private handleRouter(name: string, args: readonly unknown[]): string {
     if (name === 'defaultFactory') {
       return routerInterface.encodeFunctionResult(name, [this.defaultFactory]);
@@ -152,7 +164,7 @@ class FakeProvider implements AerodromeProvider {
       return routerInterface.encodeFunctionResult(name, [this.factoryRegistry]);
     }
     if (name === 'poolFor') {
-      return routerInterface.encodeFunctionResult(name, [this.poolAddress]);
+      return routerInterface.encodeFunctionResult(name, [this.poolForArgs(args, this.poolAddress)]);
     }
     if (name === 'getAmountsOut') {
       return routerInterface.encodeFunctionResult(name, [this.amountsOut(args)]);
@@ -160,18 +172,43 @@ class FakeProvider implements AerodromeProvider {
     throw new Error(`unhandled router call ${name}`);
   }
 
-  private handleFactory(name: string): string {
+  private handleFactory(name: string, args: readonly unknown[]): string {
     if (name === 'isPool') {
       return factoryInterface.encodeFunctionResult(name, [this.isPool]);
     }
     if (name === 'getPool') {
-      return factoryInterface.encodeFunctionResult(name, [this.factoryPoolAddress]);
+      return factoryInterface.encodeFunctionResult(name, [
+        this.poolForArgs(args, this.factoryPoolAddress),
+      ]);
     }
     throw new Error(`unhandled factory call ${name}`);
   }
 
-  private handlePool(name: string): string {
+  private handlePool(name: string, poolAddress: string): string {
     if (name === 'metadata') {
+      const pool = getAddress(poolAddress);
+      if (pool === AERO_POOL) {
+        return poolInterface.encodeFunctionResult(name, [
+          BigNumber.from(6),
+          BigNumber.from(18),
+          this.reserve0,
+          this.reserve1,
+          false,
+          BASE_TOKENS.USDC.address,
+          BASE_TOKENS.AERO.address,
+        ]);
+      }
+      if (pool === WETH_POOL) {
+        return poolInterface.encodeFunctionResult(name, [
+          BigNumber.from(18),
+          BigNumber.from(18),
+          this.reserve0,
+          this.reserve1,
+          false,
+          BASE_TOKENS.AERO.address,
+          BASE_TOKENS.WETH.address,
+        ]);
+      }
       return poolInterface.encodeFunctionResult(name, [
         BigNumber.from(6),
         BigNumber.from(18),
@@ -207,7 +244,33 @@ class FakeProvider implements AerodromeProvider {
     if (this.malformedAmounts) {
       return [amountIn];
     }
-    return [amountIn, this.amountOut];
+    const routes = args[1] as readonly unknown[];
+    const configured = this.amountOutByRouteLength.get(routes.length);
+    if (routes.length === 2) {
+      return [amountIn, BigNumber.from('250000000000000000'), configured ?? this.amountOut];
+    }
+    return [amountIn, configured ?? this.amountOut];
+  }
+
+  private poolForArgs(args: readonly unknown[], defaultPool: string): string {
+    if (defaultPool !== POOL) {
+      return defaultPool;
+    }
+    const from = getAddress(String(args[0]));
+    const to = getAddress(String(args[1]));
+    if (
+      (from === BASE_TOKENS.USDC.address && to === BASE_TOKENS.AERO.address) ||
+      (from === BASE_TOKENS.AERO.address && to === BASE_TOKENS.USDC.address)
+    ) {
+      return AERO_POOL;
+    }
+    if (
+      (from === BASE_TOKENS.AERO.address && to === BASE_TOKENS.WETH.address) ||
+      (from === BASE_TOKENS.WETH.address && to === BASE_TOKENS.AERO.address)
+    ) {
+      return WETH_POOL;
+    }
+    return this.poolAddress;
   }
 }
 
@@ -258,10 +321,84 @@ describe('Aerodrome router connector', () => {
     });
   });
 
-  it('rejects unsupported BUY exact-output swaps instead of faking stable-pool math', async () => {
-    const connector = new Aerodrome(new FakeProvider());
+  it('selects the best direct or two-hop exact-input route', async () => {
+    const provider = new FakeProvider();
+    provider.amountOutByRouteLength.set(1, BigNumber.from('400000000000000000'));
+    provider.amountOutByRouteLength.set(2, HALF_WETH);
+    const connector = new Aerodrome(provider, BASE_MAINNET, () => 1_700_000_000);
 
+    const quote = await connector.quoteSwap(request());
+
+    expect(quote.amountOutAtomic.toString()).toBe(HALF_WETH.toString());
+    expect(quote.routes).toHaveLength(2);
+    expect(quote.poolAddresses).toEqual([AERO_POOL, WETH_POOL]);
+    expect(quote.poolType).toBe('volatile');
+    expect(quote.routePoolTypes).toEqual(['volatile', 'volatile']);
+  });
+
+  it('plans native ETH input and output swaps with router ETH methods', async () => {
+    const ethSellProvider = new FakeProvider();
+    const ethSellConnector = new Aerodrome(ethSellProvider, BASE_MAINNET, () => 1_700_000_000);
+
+    const ethSell = await ethSellConnector.executeSwap({
+      baseToken: BASE_TOKENS.ETH,
+      quoteToken: BASE_TOKENS.USDC,
+      amount: '0.5',
+      side: 'SELL',
+      poolType: 'volatile',
+      walletAddress: OWNER,
+      deadline: 1_700_000_120,
+    });
+
+    expect(ethSell.approval).toBeUndefined();
+    expect(ethSell.swap.value).toBe(HALF_WETH.toString());
+    expect(routerInterface.parseTransaction({ data: ethSell.swap.data }).name).toBe(
+      'swapExactETHForTokens',
+    );
+
+    const tokenSellProvider = new FakeProvider();
+    tokenSellProvider.allowanceAmount = BigNumber.from(0);
+    const tokenSellConnector = new Aerodrome(tokenSellProvider, BASE_MAINNET, () => 1_700_000_000);
+
+    const tokenSell = await tokenSellConnector.executeSwap({
+      baseToken: BASE_TOKENS.USDC,
+      quoteToken: BASE_TOKENS.ETH,
+      amount: '1',
+      side: 'SELL',
+      poolType: 'volatile',
+      walletAddress: OWNER,
+      deadline: 1_700_000_120,
+    });
+
+    expect(tokenSell.approval?.to).toBe(BASE_TOKENS.USDC.address);
+    expect(tokenSell.swap.value).toBe('0');
+    expect(routerInterface.parseTransaction({ data: tokenSell.swap.data }).name).toBe(
+      'swapExactTokensForETH',
+    );
+
+    const poorEthProvider = new FakeProvider();
+    poorEthProvider.nativeBalanceAmount = HALF_WETH.sub(1);
+    await expect(
+      new Aerodrome(poorEthProvider, BASE_MAINNET, () => 1_700_000_000).executeSwap({
+        baseToken: BASE_TOKENS.ETH,
+        quoteToken: BASE_TOKENS.USDC,
+        amount: '0.5',
+        side: 'SELL',
+        poolType: 'volatile',
+        walletAddress: OWNER,
+      }),
+    ).rejects.toThrow(BalanceError);
+  });
+
+  it('rejects unsupported BUY exact-output swaps before touching Aerodrome contracts', async () => {
+    const provider = new FakeProvider();
+    const connector = new Aerodrome(provider);
+
+    await expect(connector.quoteSwap(request({ side: 'BUY' }))).rejects.toThrow(
+      'Aerodrome basic Router does not support BUY exact-output swaps',
+    );
     await expect(connector.quoteSwap(request({ side: 'BUY' }))).rejects.toThrow(QuoteError);
+    expect(provider.calls).toHaveLength(0);
   });
 
   it('rejects wrong chain, same tokens, unapproved factory, and missing pool code', async () => {
@@ -283,7 +420,7 @@ describe('Aerodrome router connector', () => {
 
     const noPoolCode = new FakeProvider();
     noPoolCode.code.delete(POOL);
-    await expect(new Aerodrome(noPoolCode).quoteSwap(request())).rejects.toThrow(
+    await expect(new Aerodrome(noPoolCode).quoteSwap(request({ maxHops: 1 }))).rejects.toThrow(
       PoolValidationError,
     );
   });
@@ -307,13 +444,15 @@ describe('Aerodrome router connector', () => {
 
     const wrongTokens = new FakeProvider();
     wrongTokens.token1 = BASE_TOKENS.AERO.address;
-    await expect(new Aerodrome(wrongTokens).quoteSwap(request())).rejects.toThrow(
+    await expect(new Aerodrome(wrongTokens).quoteSwap(request({ maxHops: 1 }))).rejects.toThrow(
       PoolValidationError,
     );
 
     const malformed = new FakeProvider();
     malformed.malformedAmounts = true;
-    await expect(new Aerodrome(malformed).quoteSwap(request())).rejects.toThrow(QuoteError);
+    await expect(new Aerodrome(malformed).quoteSwap(request({ maxHops: 1 }))).rejects.toThrow(
+      QuoteError,
+    );
   });
 
   it('rejects token decimal mismatches and slippage that would produce zero minimum output', async () => {
@@ -325,6 +464,10 @@ describe('Aerodrome router connector', () => {
 
     await expect(
       new Aerodrome(new FakeProvider()).quoteSwap(request({ slippageBps: 10_000 })),
+    ).rejects.toThrow(TransactionPreflightError);
+
+    await expect(
+      new Aerodrome(new FakeProvider()).quoteSwap(request({ maxHops: 3 as unknown as 1 })),
     ).rejects.toThrow(TransactionPreflightError);
   });
 
@@ -371,7 +514,7 @@ describe('Aerodrome router connector', () => {
 
     const stableMismatch = new FakeProvider();
     stableMismatch.stable = true;
-    await expect(new Aerodrome(stableMismatch).quoteSwap(request())).rejects.toThrow(
+    await expect(new Aerodrome(stableMismatch).quoteSwap(request({ maxHops: 1 }))).rejects.toThrow(
       PoolValidationError,
     );
 
@@ -383,7 +526,9 @@ describe('Aerodrome router connector', () => {
 
     const zeroOut = new FakeProvider();
     zeroOut.amountOut = BigNumber.from(0);
-    await expect(new Aerodrome(zeroOut).quoteSwap(request())).rejects.toThrow(QuoteError);
+    await expect(new Aerodrome(zeroOut).quoteSwap(request({ maxHops: 1 }))).rejects.toThrow(
+      QuoteError,
+    );
   });
 
   it('plans approval and swap transactions without signing or accepting client calldata', async () => {

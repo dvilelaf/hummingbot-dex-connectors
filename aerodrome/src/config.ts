@@ -17,6 +17,11 @@ export const BASE_MAINNET: AerodromeNetworkConfig = {
 };
 
 export const BASE_TOKENS = {
+  ETH: {
+    symbol: 'ETH',
+    address: getAddress('0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'),
+    decimals: 18,
+  },
   USDC: {
     symbol: 'USDC',
     address: getAddress('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'),
@@ -32,7 +37,7 @@ export const BASE_TOKENS = {
     address: getAddress('0x940181a94A35A4569E4529A3CDfB74e38FD98631'),
     decimals: 18,
   },
-} satisfies Record<'USDC' | 'WETH' | 'AERO', TokenInfo>;
+} satisfies Record<'ETH' | 'USDC' | 'WETH' | 'AERO', TokenInfo>;
 
 export function aerodromeBaseConfig(): AerodromeNetworkConfig {
   return BASE_MAINNET;

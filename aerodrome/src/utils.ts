@@ -6,6 +6,7 @@ import type { PoolType, TokenInfo } from './types.js';
 
 const DECIMAL_PATTERN = /^(?:0|[1-9]\d*)(?:\.\d+)?$/u;
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+export const NATIVE_ETH_ADDRESS = getAddress('0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE');
 
 export function checksumAddress(address: string, label: string): string {
   if (!isAddress(address)) {
@@ -26,6 +27,10 @@ export function validateToken(token: TokenInfo): TokenInfo {
     address: checksumAddress(token.address, `${token.symbol} address`),
     decimals: token.decimals,
   };
+}
+
+export function isNativeEth(token: TokenInfo): boolean {
+  return token.address === NATIVE_ETH_ADDRESS;
 }
 
 export function atomicAmount(amount: string, decimals: number): BigNumber {

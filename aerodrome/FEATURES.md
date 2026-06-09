@@ -14,7 +14,7 @@ Marlin-style multi-connector runtime.
 
 ## Aerodrome Base Support
 
-- [x] Base mainnet chain configuration with official Router, PoolFactory, FactoryRegistry, WETH, USDC, WETH, and AERO addresses.
+- [x] Base mainnet chain configuration with official Router, PoolFactory, FactoryRegistry, ETH, WETH, USDC, and AERO addresses.
 - [x] Router, PoolFactory, FactoryRegistry, Pool, and ERC20 minimal ABIs kept local and narrow.
 - [x] Provider chain ID validation for Base `8453`.
 - [x] Deployed-code validation for core contracts and configured tokens.
@@ -24,8 +24,12 @@ Marlin-style multi-connector runtime.
 ## Swap And Quote Lifecycle
 
 - [x] Exact-input `SELL` quotes through Aerodrome basic volatile and stable pools.
-- [x] Exact-input `SELL` execution plans through `swapExactTokensForTokens`.
+- [x] Exact-input `SELL` execution plans through `swapExactTokensForTokens`, `swapExactETHForTokens`, and `swapExactTokensForETH`.
 - [x] `BUY` requests handled explicitly by rejecting exact-output swaps that the basic Router cannot support safely.
+- [x] Bounded direct or two-hop route search over configured Base tokens.
+- [x] Stable and volatile variants evaluated per route leg.
+- [x] Best valid route selected by highest Router `getAmountsOut` result.
+- [x] Native ETH input and output swaps planned through Aerodrome Router ETH methods while preserving WETH route validation.
 - [x] Stable and volatile pool routing with pool metadata validation.
 - [x] Pool existence validation through Router `poolFor`, PoolFactory `getPool`, and PoolFactory `isPool`.
 - [x] Pool token-set, stable-flag, and nonzero-reserve validation.
@@ -46,7 +50,7 @@ Marlin-style multi-connector runtime.
 - [x] Malformed provider and contract responses wrapped in connector errors.
 - [x] Public route helpers return JSON-safe DTOs, not ethers `BigNumber` internals.
 - [x] Internal BigNumber arithmetic kept behind typed connector boundaries.
-- [x] Native ETH swaps excluded from the MVP to avoid wrapping and balance edge cases.
+- [x] Native ETH represented with the standard sentinel address at the public boundary and WETH inside Aerodrome routes.
 
 ## Documentation
 
@@ -62,7 +66,7 @@ Marlin-style multi-connector runtime.
 - [x] Package build passes.
 - [x] Prettier check passes.
 - [x] Vitest coverage gate is set to at least 85 percent for statements, lines, functions, and branches.
-- [x] Unit tests cover quote, execute, approvals, config validation, provider failures, slippage, BUY rejection, and cache immutability.
+- [x] Unit tests cover quote, execute, approvals, multi-hop selection, native ETH swaps, config validation, provider failures, slippage, BUY rejection, and cache immutability.
 - [x] Multidisciplinary review completed for architecture, backend correctness, security, and test quality with no remaining findings.
 
 ## Deliberately Out Of Scope For This MVP
@@ -72,7 +76,5 @@ that should only be added when the runtime needs them.
 
 - Exact-output BUY swaps, because Aerodrome's basic Router does not provide a safe exact-output method.
 - Slipstream concentrated liquidity routing.
-- Multi-hop route search.
 - Liquidity provision, withdrawals, gauges, bribes, and reward claiming.
-- Native ETH wrapping or unwrapping.
 - MEV protection, private relay submission, or custom transaction broadcasting.
