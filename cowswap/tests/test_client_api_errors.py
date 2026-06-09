@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from typing import NoReturn
 
@@ -183,16 +184,22 @@ async def test_post_sell_order_rejects_malformed_uid(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_quote_sell_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_quote_sell_retries_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Transient Order Book API failures are retried before surfacing."""
     api = FlakyQuoteApi()
     client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
     monkeypatch.setattr(client, "_api", api)
+    caplog.set_level(logging.WARNING, logger="hummingbot_cowswap.client")
 
     quote = await client.quote_sell(quote_request())
 
     assert quote.quote.validTo == 1_900_000_000
     assert api.calls == 2
+    assert caplog.records[0].cow_operation == "quote_sell"
+    assert caplog.records[0].cow_attempt == 1
 
 
 @pytest.mark.asyncio

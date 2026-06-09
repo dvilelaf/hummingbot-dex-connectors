@@ -12,7 +12,7 @@
 - [x] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
 - [ ] Persist enough order metadata to recover after process restart before emitting terminal events.
 - [ ] Use Hummingbot-managed signing and credential handling; never store, log, or pass raw private keys through connector configuration.
-- [ ] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
+- [x] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
 - [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
 - [x] Keep configuration deterministic and environment-driven for Docker Compose packaging.
 - [x] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
@@ -44,8 +44,8 @@
 - [x] Surface insufficient allowance separately from quote, signing, and settlement failures.
 - [x] Implement quote request creation for sell orders.
 - [x] Implement quote response parsing.
-- [ ] Implement EIP-712 order signing with per-chain domain validation, `chainId`, verifying contract, validity bounds, and replay-protection checks.
-- [ ] Verify order UID, digest, quote ID, `validTo`, and signed order fields before posting.
+- [x] Implement EIP-712 order signing with per-chain domain validation, `chainId`, verifying contract, validity bounds, and replay-protection checks.
+- [x] Verify order UID, digest, quote ID, `validTo`, and signed order fields before posting.
 - [x] Implement order posting.
 - [x] Store and track CoW order UID.
 - [ ] Map CoW order states to Hummingbot order states across quote, signed intent, posted order, accepted/open, solver settlement transaction, fills, expiration, cancellation, and rejection.
@@ -83,7 +83,7 @@
 - [x] Support failed/rejected state.
 - [x] Reconcile locally tracked orders after process restart.
 - [x] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
-- [ ] Emit Hummingbot order events consistently.
+- [x] Emit Hummingbot order events consistently.
 - [x] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
 
 ## Trading Features
@@ -113,17 +113,17 @@
 
 ## Production Hardening
 
-- [ ] Add rate limit handling.
-- [ ] Add retry policy for transient API failures.
-- [ ] Add timeout handling for quotes, posting, polling, and cancellation.
-- [ ] Add structured logging.
+- [x] Add rate limit handling.
+- [x] Add retry policy for transient API failures.
+- [x] Add timeout handling for implemented Order Book API calls: quotes, posting, polling, and health checks.
+- [x] Add structured logging.
 - [x] Add clear errors for unsupported tokens and chains.
-- [ ] Add health checks for Order Book API availability.
+- [x] Add health checks for Order Book API availability.
 - [x] Add safeguards for stale quotes.
 - [x] Add safeguards for duplicate submissions.
 - [ ] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
 - [x] Add replay-focused signing tests for chain ID, verifying contract, and signer-owner mismatches.
-- [ ] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
+- [x] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
 - [ ] Run lint, typecheck, unit tests, and integration tests.
 - [x] Prepare usage examples.
 - [x] Prepare upstream contribution notes if submitting to Hummingbot.

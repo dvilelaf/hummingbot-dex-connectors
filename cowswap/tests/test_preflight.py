@@ -73,7 +73,10 @@ class FakeClient:
     async def post_sell_order(self, order: dict[str, object]) -> str:
         """Capture a posted order and return a deterministic UID."""
         self.posted_orders.append(order)
-        return "0x" + "aa" * 56
+        if "expected_order_uid" in order:
+            return str(order["expected_order_uid"])
+        valid_to = int(order["valid_to"])
+        return f"0x{'aa' * 32}{str(order['owner'])[2:]}{valid_to:08x}"
 
     async def get_order_status(self, _order_uid: str) -> object:
         """Return an open status."""

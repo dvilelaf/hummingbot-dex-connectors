@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
@@ -25,6 +26,7 @@ DEFAULT_RETRY_DELAY_SECONDS = 0.25
 HTTP_TOO_MANY_REQUESTS = 429
 HTTP_SERVER_ERROR_MIN = 500
 HTTP_SERVER_ERROR_MAX = 600
+LOGGER = logging.getLogger(__name__)
 
 
 class CoWClient(Protocol):
@@ -300,6 +302,15 @@ async def _call_order_book(
 
         if attempt >= max_attempts:
             raise error from cause
+        LOGGER.warning(
+            "retrying CoW Order Book API operation",
+            extra={
+                "cow_operation": operation,
+                "cow_attempt": attempt,
+                "cow_max_attempts": max_attempts,
+                "cow_error_type": cause.__class__.__name__,
+            },
+        )
         if retry_delay_seconds:
             await asyncio.sleep(retry_delay_seconds)
 
