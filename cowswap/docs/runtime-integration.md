@@ -4,6 +4,8 @@ This connector is owned by the Hummingbot API/runtime image. Marlin must not
 import `hummingbot_cowswap` directly; it should call Hummingbot API using the
 same connector endpoints it already uses for other venues.
 
+See `usage.md` for minimal commands and `upstream-notes.md` for PR gaps.
+
 ## Runtime Contract
 
 The package is installed into the custom Hummingbot API image. The connector
