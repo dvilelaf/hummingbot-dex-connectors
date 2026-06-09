@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from eth_utils import is_checksum_address, keccak
+from eth_utils.address import is_checksum_address
+from eth_utils.crypto import keccak
 
 from hummingbot_cowswap.errors import UnsupportedChainError
 

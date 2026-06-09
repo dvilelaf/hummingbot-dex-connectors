@@ -15,7 +15,6 @@
 
 - [ ] Ensure the connector appears in Hummingbot API `/connectors/`.
 - [ ] Ensure Hummingbot API exposes connector metadata through `/connectors/{connector}/order-types`, `/connectors/{connector}/trading-rules`, and `/connectors/{connector}/config-map`.
-- [ ] Add a Marlin readiness path that verifies connector availability, supported order types, trading rules, account connector state, and order book or equivalent market data availability.
 
 ## Trading Features
 

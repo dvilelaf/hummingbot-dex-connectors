@@ -6,8 +6,8 @@ What is missing for a real Hummingbot PR:
   discovery, config maps, trading rules, order types, and API routes.
 - Wire account, signer, allowance, and optional Gateway ownership without raw
   private keys in connector or Marlin configuration.
-- Implement status, trades, expiry, rejection, partial fill, fill, and signed
-  cancellation reconciliation.
+- Prove the status, trades, expiry, rejection, partial fill, fill, and signed
+  cancellation reconciliation paths in a real Hummingbot API runtime.
 - Define the exact Hummingbot order-type mapping for CoW intents before
   claiming limit-order support.
 - Add packaging/runtime image steps so import smoke succeeds inside Hummingbot
@@ -16,8 +16,8 @@ What is missing for a real Hummingbot PR:
 Do not sell yet:
 
 - No claim of production readiness, settlement proof, or autonomous execution.
-- No claim of generic limit orders, native ETH, multi-chain support, or
-  complete cancellation.
+- No claim of generic limit orders, native ETH flow, or funded-account
+  settlement coverage.
 - No claim that staging smoke tests prove fills; they only prove API
   reachability and classified rejection with a dummy wallet.
 

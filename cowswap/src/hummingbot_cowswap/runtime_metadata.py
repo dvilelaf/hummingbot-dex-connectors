@@ -166,7 +166,8 @@ def _validate_static_metadata() -> None:
     if metadata["connector"] != CONNECTOR_NAME:
         message = "connector metadata is inconsistent"
         raise RuntimeError(message)
-    if SUPPORTED_ORDER_TYPES[0] not in metadata["order_types"]:
+    order_types = metadata.get("order_types")
+    if not isinstance(order_types, list) or SUPPORTED_ORDER_TYPES[0] not in order_types:
         message = "runtime metadata does not expose the expected order type"
         raise RuntimeError(message)
     if not _config_map_is_safe(CONFIG_MAP):
