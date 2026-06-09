@@ -1,5 +1,23 @@
 # Aerodrome Connector Features
 
+## Architecture and Practices
+
+- [ ] Follow Hummingbot Gateway connector architecture; do not create a Marlin-specific API or custom connector surface.
+- [ ] Keep the connector in the Gateway runtime and expose it through Hummingbot API/Gateway REST endpoints.
+- [ ] Follow the standard Gateway folder layout: connector class, config, constants, utilities, and route folders by schema.
+- [ ] Keep route handlers thin: validate requests, call connector methods, format responses, and map errors.
+- [ ] Keep protocol logic in the connector class and pure helpers in utility modules.
+- [ ] Use strong TypeScript types and avoid `any`.
+- [ ] Use async/await consistently.
+- [ ] Add contextual connector errors without leaking secrets, private data, or raw transaction signing material.
+- [ ] Validate all chain IDs, networks, contract addresses, ABIs, token metadata, and spender addresses before signing or sending transactions.
+- [ ] Reuse patterns from existing Gateway connectors, especially `uniswap` and `pancakeswap`, instead of inventing new abstractions.
+- [ ] Keep Gateway schemas clean: Router for swaps, AMM for basic-pool liquidity, and CLMM for concentrated-liquidity positions.
+- [ ] Keep configuration deterministic and environment-driven for Docker Compose packaging.
+- [ ] Add unit, mocked provider, endpoint integration, and fork tests before considering a feature complete.
+- [ ] Maintain at least the Gateway minimum test coverage target.
+- [ ] Document every supported endpoint, network, pool type, limitation, and operational assumption.
+
 ## MVP: Swap-Only Gateway Connector
 
 - [ ] Define MVP scope as Base mainnet swap support for Aerodrome basic stable/volatile pools only.

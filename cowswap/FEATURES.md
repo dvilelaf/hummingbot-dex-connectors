@@ -1,5 +1,23 @@
 # CoW Swap Connector Features
 
+## Architecture and Practices
+
+- [ ] Follow Hummingbot Python connector architecture; do not create a standalone bot or Marlin-specific API around CoW.
+- [ ] Keep the connector in the Hummingbot API/runtime layer and expose it through standard Hummingbot connector surfaces.
+- [ ] Preserve Hummingbot connector semantics: connector name, trading pair, config map, trading rules, order types, balances, fees, client order IDs, order states, fills, cancellations, and order events.
+- [ ] Separate CoW API access, Hummingbot connector logic, order tracking, signing, persistence, and tests into clear modules.
+- [ ] Keep the CoW API client focused on Order Book API calls and response normalization.
+- [ ] Keep Hummingbot order lifecycle logic outside the low-level CoW API client.
+- [ ] Treat CoW orders as asynchronous intents, not synchronous swaps.
+- [ ] Map CoW lifecycle transitions into Hummingbot order states without losing partial fill, expiration, cancellation, or rejection information.
+- [ ] Persist enough order metadata to recover after process restart before emitting terminal events.
+- [ ] Use Hummingbot-managed signing and credential handling; never store, log, or pass raw private keys through connector configuration.
+- [ ] Validate chain IDs, EIP-712 domains, settlement/verifying contracts, `GPv2VaultRelayer` addresses, token metadata, and allowances before signing or posting orders.
+- [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
+- [ ] Keep configuration deterministic and environment-driven for Docker Compose packaging.
+- [ ] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
+- [ ] Document every supported chain, token scope, order type, limitation, and operational assumption.
+
 ## MVP: Python Hummingbot Connector
 
 - [ ] Define connector boundary as a Python spot-style Hummingbot connector installed in the Hummingbot API/runtime layer, not imported directly by Marlin.
