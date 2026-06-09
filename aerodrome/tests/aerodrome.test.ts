@@ -408,6 +408,23 @@ describe('Aerodrome router connector', () => {
       UnsupportedNetworkError,
     );
 
+    const spoofedCore = new FakeProvider();
+    const spoofedConnector = new Aerodrome(spoofedCore, {
+      ...BASE_MAINNET,
+      contracts: {
+        ...BASE_MAINNET.contracts,
+        router: getAddress('0x2222222222222222222222222222222222222222'),
+        poolFactory: getAddress('0x3333333333333333333333333333333333333333'),
+        factoryRegistry: getAddress('0x4444444444444444444444444444444444444444'),
+      },
+    });
+    await expect(spoofedConnector.quoteSwap(request())).rejects.toThrow(PoolValidationError);
+    expect(() =>
+      spoofedConnector.buildApprovalTransaction(OWNER, BASE_TOKENS.USDC, ONE_USDC),
+    ).toThrow(PoolValidationError);
+    expect(spoofedCore.calls).toHaveLength(0);
+    expect(spoofedCore.estimated).toHaveLength(0);
+
     await expect(
       new Aerodrome(new FakeProvider()).quoteSwap(request({ quoteToken: BASE_TOKENS.USDC })),
     ).rejects.toThrow(QuoteError);

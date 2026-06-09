@@ -1,5 +1,8 @@
 export { Aerodrome } from './aerodrome.js';
 export { aerodromeBaseConfig, BASE_MAINNET, BASE_TOKENS } from './config.js';
 export * from './errors.js';
+export * from './liquidity/index.js';
+export * from './rewards/index.js';
+export * from './slipstream/index.js';
 export * from './types.js';
 export * from './utils.js';

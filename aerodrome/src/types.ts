@@ -1,4 +1,4 @@
-import type { BigNumber } from '@ethersproject/bignumber';
+import type { BigNumber, BigNumberish } from '@ethersproject/bignumber';
 
 // Hummingbot-style BUY is exact-output. Aerodrome basic Router support is
 // intentionally rejected until a safe exact-output ABI path exists.
@@ -17,6 +17,17 @@ export interface AerodromeContracts {
   readonly poolFactory: string;
   readonly factoryRegistry: string;
   readonly weth: string;
+  readonly voter?: string;
+  readonly votingEscrow?: string;
+  readonly slipstream?: AerodromeSlipstreamContracts;
+}
+
+export interface AerodromeSlipstreamContracts {
+  readonly router: string;
+  readonly quoter: string;
+  readonly poolFactory?: string;
+  readonly mixedQuoter?: string;
+  readonly positionManager?: string;
 }
 
 export interface AerodromeNetworkConfig {
@@ -152,4 +163,73 @@ export interface AerodromeExecutionPlanDto {
   readonly quote: AerodromeQuoteDto;
   readonly approval?: PlannedTransaction;
   readonly swap: PlannedTransaction;
+}
+
+export type AerodromeGaugeSelector =
+  | { readonly gaugeAddress: string; readonly poolAddress?: never }
+  | { readonly poolAddress: string; readonly gaugeAddress?: never };
+
+export interface GaugeDepositRequest {
+  readonly walletAddress: string;
+  readonly lpToken: TokenInfo;
+  readonly liquidity: BigNumberish;
+  readonly recipient?: string;
+}
+
+export type PlanGaugeDepositRequest = GaugeDepositRequest & AerodromeGaugeSelector;
+export type PlanGaugeWithdrawRequest = {
+  readonly walletAddress: string;
+  readonly liquidity: BigNumberish;
+} & AerodromeGaugeSelector;
+export type PlanGaugeRewardClaimRequest = {
+  readonly walletAddress: string;
+  readonly accountAddress?: string;
+} & AerodromeGaugeSelector;
+
+export interface AerodromeGaugeDepositPlan {
+  readonly gaugeAddress: string;
+  readonly approval?: PlannedTransaction;
+  readonly deposit: PlannedTransaction;
+}
+
+export interface AerodromeGaugeWithdrawPlan {
+  readonly gaugeAddress: string;
+  readonly withdraw: PlannedTransaction;
+}
+
+export interface AerodromeGaugeRewardClaimPlan {
+  readonly gaugeAddress: string;
+  readonly claim: PlannedTransaction;
+}
+
+export type AerodromeGaugeListSelector =
+  | { readonly gauges: readonly string[]; readonly pools?: never }
+  | { readonly pools: readonly string[]; readonly gauges?: never };
+
+export type PlanVoterClaimRewardsRequest = {
+  readonly walletAddress: string;
+} & AerodromeGaugeListSelector;
+
+export type AerodromeVoterRewardClaim = {
+  readonly tokenAddresses: readonly string[];
+} & AerodromeGaugeSelector;
+
+export interface PlanVoterClaimVotingRewardsRequest {
+  readonly walletAddress: string;
+  readonly tokenId: BigNumberish;
+  readonly claims: readonly AerodromeVoterRewardClaim[];
+}
+
+export interface AerodromeVoterClaimRewardsPlan {
+  readonly voterAddress: string;
+  readonly gaugeAddresses: readonly string[];
+  readonly claim: PlannedTransaction;
+}
+
+export interface AerodromeVoterVotingRewardsPlan {
+  readonly voterAddress: string;
+  readonly gaugeAddresses: readonly string[];
+  readonly rewardAddresses: readonly string[];
+  readonly tokenAddresses: readonly (readonly string[])[];
+  readonly claim: PlannedTransaction;
 }

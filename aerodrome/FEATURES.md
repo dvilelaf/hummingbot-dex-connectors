@@ -1,14 +1,9 @@
 # Aerodrome Open Features
 
-This file only tracks viable open work for the Aerodrome connector.
-Completed MVP scope is documented in the README and usage docs.
+No open Aerodrome connector features remain in this tracker.
 
-## Connector Scope
+Completed scope now includes:
 
-- [ ] Add Slipstream concentrated-liquidity routing as a separate routing module.
-- [ ] Add liquidity position planning for Aerodrome basic pools.
-- [ ] Add gauges, bribes, rewards, and claim planning as a separate yield/positions surface.
-
-## Runtime Scope
-
-- [ ] Add MEV/private relay submission support in the shared runtime, using connector transaction plans as input.
+- Slipstream concentrated-liquidity exact-input swap routing as a separate module.
+- Basic-pool liquidity add/remove transaction planning.
+- Gauge deposit/withdraw, gauge reward claims, and Voter fees/bribes/rewards claim planning.

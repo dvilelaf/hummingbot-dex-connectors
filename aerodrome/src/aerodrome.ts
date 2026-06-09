@@ -2,7 +2,7 @@ import { Interface } from '@ethersproject/abi';
 import { getAddress } from '@ethersproject/address';
 import { BigNumber } from '@ethersproject/bignumber';
 
-import { aerodromeBaseConfig, BASE_TOKENS } from './config.js';
+import { BASE_MAINNET, BASE_TOKENS, aerodromeBaseConfig } from './config.js';
 import {
   ERC20_ABI,
   FACTORY_REGISTRY_ABI,
@@ -68,6 +68,7 @@ export class Aerodrome {
 
   public async quoteSwap(request: QuoteSwapRequest): Promise<AerodromeQuote> {
     await this.assertNetwork();
+    this.assertOfficialBaseCoreContracts();
     const normalized = await this.normalizeQuoteRequest(request);
     await this.assertCoreContracts();
 
@@ -205,6 +206,7 @@ export class Aerodrome {
     token: TokenInfo,
     amount: BigNumber,
   ): PlannedTransaction {
+    this.assertOfficialBaseCoreContracts();
     const ownerAddress = nonZeroAddress(owner, 'owner');
     const normalizedToken = validateToken(token);
     const data = this.erc20Interface.encodeFunctionData('approve', [
@@ -226,6 +228,7 @@ export class Aerodrome {
     walletAddress: string,
   ): Promise<AerodromeExecutionPlan> {
     await this.assertNetwork();
+    this.assertOfficialBaseCoreContracts();
     await this.assertCoreContracts();
     await this.validateCachedQuoteRoute(quote);
 
@@ -446,6 +449,7 @@ export class Aerodrome {
   }
 
   private async assertCoreContracts(): Promise<void> {
+    this.assertOfficialBaseCoreContracts();
     await Promise.all([
       this.assertContractCode(this.config.contracts.router, 'Aerodrome Router'),
       this.assertContractCode(this.config.contracts.poolFactory, 'Aerodrome PoolFactory'),
@@ -465,6 +469,19 @@ export class Aerodrome {
     const approved = await this.factoryApproved(this.config.contracts.poolFactory);
     if (!approved) {
       throw new PoolValidationError('configured PoolFactory is not approved by FactoryRegistry');
+    }
+  }
+
+  private assertOfficialBaseCoreContracts(): void {
+    if (this.config.chainId !== BASE_MAINNET.chainId) {
+      return;
+    }
+    if (
+      this.config.contracts.router !== BASE_MAINNET.contracts.router ||
+      this.config.contracts.poolFactory !== BASE_MAINNET.contracts.poolFactory ||
+      this.config.contracts.factoryRegistry !== BASE_MAINNET.contracts.factoryRegistry
+    ) {
+      throw new PoolValidationError('Aerodrome Base core config must use official contracts');
     }
   }
 
