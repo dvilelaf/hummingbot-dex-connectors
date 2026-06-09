@@ -95,7 +95,7 @@
 - [x] Support custom validity/expiration.
 - [x] Support receiver address configuration.
 - [x] Support app data or app code attribution.
-- [ ] Support gasless fee-in-sell-token accounting.
+- [x] Support gasless fee-in-sell-token accounting.
 - [ ] Add native ETH/Eth-flow support as a distinct feature path if required.
 
 ## Additional Chain Support

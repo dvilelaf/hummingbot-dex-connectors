@@ -55,7 +55,7 @@ class FakeCoWClient:
             quote_id=99,
             sell_amount="1000000",
             buy_amount="500000000000000000",
-            fee_amount="0",
+            fee_amount="1234",
             valid_to=1_900_000_000,
             verified=True,
         )
@@ -66,7 +66,7 @@ class FakeCoWClient:
             quote_id=100,
             sell_amount="1000000",
             buy_amount="500000000000000000",
-            fee_amount="0",
+            fee_amount="5678",
             valid_to=1_900_000_000,
             verified=True,
         )
@@ -171,12 +171,14 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert tracked.client_order_id == "cid-1"
     assert tracked.order_uid.startswith("0xaaaa")
     assert client.posted_orders[0]["buy_amount"] == "497500000000000000"
-    assert client.posted_orders[0]["fee_amount"] == "0"
+    assert client.posted_orders[0]["fee_amount"] == "1234"
     assert client.posted_orders[0]["quote_id"] == 99
+    assert tracked.fee_amount == "1234"
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
+    assert recovered.fee_amount == "1234"
     assert recovered.state is OrderState.OPEN
 
 
@@ -203,11 +205,14 @@ async def test_submit_buy_order_posts_quote_derived_order_and_tracks_open_state(
     assert client.posted_orders[0]["kind"] == "buy"
     assert client.posted_orders[0]["sell_amount"] == "1005000"
     assert client.posted_orders[0]["buy_amount"] == "500000000000000000"
+    assert client.posted_orders[0]["fee_amount"] == "5678"
     assert client.posted_orders[0]["quote_id"] == 100
+    assert tracked.fee_amount == "5678"
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-buy-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
+    assert recovered.fee_amount == "5678"
     assert recovered.state is OrderState.OPEN
 
 

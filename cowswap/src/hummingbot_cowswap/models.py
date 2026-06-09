@@ -112,6 +112,7 @@ class TrackedOrder(BaseModel):
     digest: str
     signing_scheme: str
     partially_fillable: bool
+    fee_amount: str = "0"
     state: OrderState = OrderState.SUBMITTED
     executed_sell: str = "0"
     executed_buy: str = "0"

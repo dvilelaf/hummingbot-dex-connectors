@@ -122,6 +122,7 @@ class CoWConnector:
             request.valid_to,
         )
         quote_valid_to = _quote_valid_to(quote)
+        fee_amount = _quote_fee_amount(quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -133,7 +134,7 @@ class CoWConnector:
             "receiver": self.config.receiver,
             "sell_amount": _quote_sell_amount(quote),
             "buy_amount": minimum_buy_amount,
-            "fee_amount": "0",
+            "fee_amount": fee_amount,
             "valid_to": quote_valid_to,
             "quote_id": _quote_id(quote),
             "app_data": self.config.app_data,
@@ -164,6 +165,7 @@ class CoWConnector:
             signing_scheme="eip712",
             partially_fillable=request.partially_fillable,
         )
+        tracked.fee_amount = fee_amount
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -182,6 +184,7 @@ class CoWConnector:
             request.valid_to,
         )
         quote_valid_to = _quote_valid_to(quote)
+        fee_amount = _quote_fee_amount(quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -194,7 +197,7 @@ class CoWConnector:
             "receiver": self.config.receiver,
             "sell_amount": maximum_sell_amount,
             "buy_amount": _quote_buy_amount(quote),
-            "fee_amount": "0",
+            "fee_amount": fee_amount,
             "valid_to": quote_valid_to,
             "quote_id": _quote_id(quote),
             "app_data": self.config.app_data,
@@ -225,6 +228,7 @@ class CoWConnector:
             signing_scheme="eip712",
             partially_fillable=request.partially_fillable,
         )
+        tracked.fee_amount = fee_amount
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -381,6 +385,10 @@ def _quote_sell_amount(quote: object) -> str:
 
 def _quote_buy_amount(quote: object) -> str:
     return _root(_field(_field(quote, "quote"), "buyAmount"))
+
+
+def _quote_fee_amount(quote: object) -> str:
+    return _root(_field(_field(quote, "quote"), "feeAmount"))
 
 
 def _quote_valid_to(quote: object) -> int:
