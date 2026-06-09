@@ -7,7 +7,10 @@ from decimal import Decimal
 import pytest
 
 from hummingbot_cowswap import BuyOrderRequest, CoWToken, OrderState, SellOrderRequest, TrackedOrder
-from hummingbot_cowswap.hummingbot_adapter import HummingbotCoWAdapter
+from hummingbot_cowswap.hummingbot_adapter import (
+    HummingbotCoWAdapter,
+    HummingbotOrderEvent,
+)
 
 USDC = CoWToken(
     symbol="USDC",
@@ -144,6 +147,56 @@ async def test_in_flight_orders_expose_hummingbot_order_states() -> None:
 
     assert adapter.in_flight_orders["cid-filled"] == order
     assert adapter.order_statuses == {"cid-filled": "FILLED"}
+
+
+@pytest.mark.asyncio
+async def test_adapter_emits_hummingbot_style_create_and_cancel_events() -> None:
+    connector = FakeConnector()
+    adapter = HummingbotCoWAdapter(connector, {"USDC-WETH": (USDC, WETH)})
+    listener_events: list[HummingbotOrderEvent] = []
+    adapter.add_listener("SellOrderCreated", listener_events.append)
+    adapter.add_listener("OrderCancelled", listener_events.append)
+
+    await adapter.sell("USDC-WETH", Decimal("1.25"), client_order_id="cid-evt")
+    await adapter.cancel("cid-evt")
+
+    assert [event.event_tag for event in adapter.event_log] == [
+        "SellOrderCreated",
+        "OrderCancelled",
+    ]
+    assert listener_events == adapter.event_log
+    assert adapter.event_log[0].client_order_id == "cid-evt"
+    assert adapter.event_log[0].trading_pair == "USDC-WETH"
+    assert adapter.event_log[0].trade_type == "SELL"
+    assert adapter.event_log[0].order_type == "MARKET"
+    assert adapter.event_log[0].order_state == "OPEN"
+    assert adapter.event_log[1].order_state == "CANCELED"
+
+
+def test_adapter_maps_order_updates_to_hummingbot_style_events() -> None:
+    adapter = HummingbotCoWAdapter(FakeConnector(), {"USDC-WETH": (USDC, WETH)})
+
+    for state in OrderState:
+        adapter.record_order_update(_tracked_order(f"cid-{state.value}", state))
+
+    assert [event.event_tag for event in adapter.event_log] == [
+        "OrderCreated",
+        "OrderCreated",
+        "OrderFilled",
+        "OrderFilled",
+        "OrderCancelled",
+        "OrderExpired",
+        "MarketOrderFailure",
+    ]
+    assert adapter.order_statuses == {
+        "cid-submitted": "PENDING_CREATE",
+        "cid-open": "OPEN",
+        "cid-partially_filled": "PARTIALLY_FILLED",
+        "cid-filled": "FILLED",
+        "cid-cancelled": "CANCELED",
+        "cid-expired": "FAILED",
+        "cid-failed": "FAILED",
+    }
 
 
 def _tracked_order(client_order_id: str, state: OrderState) -> TrackedOrder:
