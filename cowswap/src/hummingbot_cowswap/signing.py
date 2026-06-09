@@ -67,6 +67,7 @@ class CowPyEip712Signer:
 def settlement_contract(config: CoWConfig) -> str:
     """Resolve the CoW settlement verifying contract for a config."""
     if config.settlement_contract is not None:
+        _normalize_address(config.settlement_contract)
         return config.settlement_contract
     return chain_config(config.chain_id, config.env).settlement_contract
 

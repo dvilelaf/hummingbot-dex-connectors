@@ -46,6 +46,13 @@ def test_signing_domain_binds_chain_id_and_verifying_contract_override() -> None
     assert domain.verifyingContract == settlement
 
 
+def test_signing_domain_rejects_invalid_verifying_contract_override() -> None:
+    owner = Account.create().address
+
+    with pytest.raises(ValueError, match="invalid Ethereum address"):
+        _signing_domain(config_for(owner, settlement_contract="0xnot-valid"))
+
+
 def test_signer_rejects_account_owner_mismatch_before_signing() -> None:
     account = Account.create()
     other_owner = Account.create().address

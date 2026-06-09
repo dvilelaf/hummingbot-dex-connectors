@@ -84,12 +84,12 @@
 - [x] Reconcile locally tracked orders after process restart.
 - [x] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
 - [ ] Emit Hummingbot order events consistently.
-- [ ] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
+- [x] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
 
 ## Trading Features
 
 - [x] Support `SELL` orders.
-- [ ] Evaluate whether `BUY` orders are required.
+- [x] Support quoted market-style `BUY` orders for completeness.
 - [ ] Support swap-style `SELL` orders from quotes, with slippage translated into limit price/minimum receive and success emitted only after settlement/fill reconciliation.
 - [x] Defer generic limit-order support until Hummingbot order-type mapping is specified.
 - [x] Support custom validity/expiration.
@@ -125,5 +125,5 @@
 - [x] Add replay-focused signing tests for chain ID, verifying contract, and signer-owner mismatches.
 - [ ] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
 - [ ] Run lint, typecheck, unit tests, and integration tests.
-- [ ] Prepare usage examples.
-- [ ] Prepare upstream contribution notes if submitting to Hummingbot.
+- [x] Prepare usage examples.
+- [x] Prepare upstream contribution notes if submitting to Hummingbot.
