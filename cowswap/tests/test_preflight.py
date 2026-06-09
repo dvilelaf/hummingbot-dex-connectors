@@ -94,6 +94,28 @@ class FakeClient:
         """Record no-op cancellation."""
 
 
+class FakeSigner:
+    """Signer fake that marks orders as signed without private key material."""
+
+    def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
+        """Attach deterministic signature metadata."""
+        valid_to = int(order["valid_to"])
+        return {
+            **order,
+            "signature": "0x" + "11" * 65,
+            "signing_scheme": "eip712",
+            "expected_order_uid": f"0x{'aa' * 32}{str(order['owner'])[2:]}{valid_to:08x}",
+        }
+
+    def sign_order_cancellation(self, order_uids: list[str]) -> dict[str, object]:
+        """Attach deterministic cancellation signature metadata."""
+        return {
+            "order_uids": tuple(order_uids),
+            "signature": "0x" + "22" * 65,
+            "signing_scheme": "eip712",
+        }
+
+
 def config(chain_id: int = 8453) -> CoWConfig:
     """Build a Base connector config."""
     return CoWConfig(
@@ -140,6 +162,7 @@ def connector(
         config=cfg or config(),
         client=client or FakeClient(),
         store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=FakeSigner(),
         evm_reader=evm_reader,
     )
 

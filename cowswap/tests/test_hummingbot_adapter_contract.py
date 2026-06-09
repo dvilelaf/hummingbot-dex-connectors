@@ -48,6 +48,12 @@ class FakeConnector:
         return self.poll_updates.pop(0)
 
 
+class SettlementRaceConnector(FakeConnector):
+    async def cancel_order(self, client_order_id: str) -> object:
+        self.cancelled.append(client_order_id)
+        return _tracked_order(client_order_id, OrderState.FILLED)
+
+
 def test_adapter_exposes_conservative_hummingbot_contract() -> None:
     adapter = HummingbotCoWAdapter(FakeConnector(), {"USDC-WETH": (USDC, WETH)})
 
@@ -177,6 +183,16 @@ async def test_adapter_emits_hummingbot_style_create_and_cancel_events() -> None
     assert adapter.event_log[0].order_type == "MARKET"
     assert adapter.event_log[0].order_state == "OPEN"
     assert adapter.event_log[1].order_state == "CANCELED"
+
+
+@pytest.mark.asyncio
+async def test_adapter_cancel_emits_reconciled_terminal_order_event() -> None:
+    adapter = HummingbotCoWAdapter(SettlementRaceConnector(), {"USDC-WETH": (USDC, WETH)})
+
+    await adapter.cancel("cid-race")
+
+    assert adapter.event_log[0].event_tag == "OrderFilled"
+    assert adapter.event_log[0].order_state == "FILLED"
 
 
 @pytest.mark.asyncio

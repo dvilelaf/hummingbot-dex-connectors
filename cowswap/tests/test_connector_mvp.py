@@ -98,6 +98,24 @@ class FakeCoWClient:
         self.cancellations.append(cancellation)
 
 
+class FakeSigner:
+    def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
+        valid_to = int(order["valid_to"])
+        return {
+            **order,
+            "signature": "0x" + "11" * 65,
+            "signing_scheme": "eip712",
+            "expected_order_uid": f"0x{'aa' * 32}{str(order['owner'])[2:]}{valid_to:08x}",
+        }
+
+    def sign_order_cancellation(self, order_uids: list[str]) -> dict[str, object]:
+        return {
+            "order_uids": tuple(order_uids),
+            "signature": "0x" + "22" * 65,
+            "signing_scheme": "eip712",
+        }
+
+
 def connector(tmp_path: Path, client: FakeCoWClient) -> CoWConnector:
     return CoWConnector(
         config=CoWConfig(
@@ -110,6 +128,7 @@ def connector(tmp_path: Path, client: FakeCoWClient) -> CoWConnector:
         ),
         client=client,
         store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=FakeSigner(),
     )
 
 
@@ -191,6 +210,32 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert recovered.order_uid == tracked.order_uid
     assert recovered.fee_amount == "1234"
     assert recovered.state is OrderState.OPEN
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_requires_hummingbot_managed_signer_before_posting(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    base = connector(tmp_path, client)
+    cow = CoWConnector(
+        config=base.config,
+        client=client,
+        store=JsonOrderStore(tmp_path / "unsigned-orders.json"),
+    )
+
+    with pytest.raises(ValueError, match="Hummingbot-managed signer"):
+        await cow.submit_sell_order(
+            SellOrderRequest(
+                client_order_id="cid-no-signer",
+                trading_pair="USDC-WETH",
+                sell_token=BASE_USDC,
+                buy_token=BASE_WETH,
+                amount="1.0",
+            )
+        )
+
+    assert client.posted_orders == []
 
 
 @pytest.mark.asyncio
@@ -585,6 +630,7 @@ async def test_cancel_order_reconciles_settlement_race_as_filled(tmp_path: Path)
 @pytest.mark.asyncio
 async def test_cancel_order_requires_hummingbot_managed_signer(tmp_path: Path) -> None:
     client = FakeCoWClient()
+    store_path = tmp_path / "orders.json"
     cow = CoWConnector(
         config=CoWConfig(
             chain_id=8453,
@@ -595,7 +641,8 @@ async def test_cancel_order_requires_hummingbot_managed_signer(tmp_path: Path) -
             slippage_bps=50,
         ),
         client=client,
-        store=JsonOrderStore(tmp_path / "orders.json"),
+        store=JsonOrderStore(store_path),
+        signer=FakeSigner(),
     )
 
     tracked = await cow.submit_sell_order(
@@ -608,9 +655,14 @@ async def test_cancel_order_requires_hummingbot_managed_signer(tmp_path: Path) -
         )
     )
     client.status = cow_order(status="cancelled", executed_sell="0", executed_buy="0")
+    unsigned = CoWConnector(
+        config=cow.config,
+        client=client,
+        store=JsonOrderStore(store_path),
+    )
 
     with pytest.raises(NotImplementedError, match="requires a Hummingbot-managed signer"):
-        await cow.cancel_order(tracked.client_order_id)
+        await unsigned.cancel_order(tracked.client_order_id)
 
 
 @pytest.mark.asyncio
@@ -688,6 +740,7 @@ async def test_new_connector_instance_reconciles_persisted_order_states_after_re
         ),
         client=client,
         store=JsonOrderStore(store_path),
+        signer=FakeSigner(),
     )
     await first.submit_sell_order(
         SellOrderRequest(

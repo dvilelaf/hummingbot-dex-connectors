@@ -2,7 +2,6 @@
 
 ## MVP: Python Hummingbot Connector
 
-- [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
 - [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
 
 ## Marlin Runtime Integration

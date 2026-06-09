@@ -156,9 +156,7 @@ class CoWConnector:
             "signing_scheme": "eip712",
         }
         expected_order_payload = dict(order_payload)
-        if self.signer is not None:
-            order_payload = self.signer.sign_order_payload(order_payload)
-            _verify_signed_order_fields(order_payload, expected_order_payload)
+        order_payload = self._sign_order_payload(order_payload, expected_order_payload)
         order_uid = await self.client.post_sell_order(order_payload)
         _verify_posted_order_uid(order_uid, order_payload)
         tracked = self.store.save_new(
@@ -179,10 +177,7 @@ class CoWConnector:
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
-        if self.signer is None:
-            tracked.metadata["signing_mode"] = "connector-signed-offchain"
-        else:
-            tracked.metadata["signing_mode"] = "hummingbot-managed"
+        tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -233,9 +228,7 @@ class CoWConnector:
             "signing_scheme": "eip712",
         }
         expected_order_payload = dict(order_payload)
-        if self.signer is not None:
-            order_payload = self.signer.sign_order_payload(order_payload)
-            _verify_signed_order_fields(order_payload, expected_order_payload)
+        order_payload = self._sign_order_payload(order_payload, expected_order_payload)
         order_uid = await self.client.post_sell_order(order_payload)
         _verify_posted_order_uid(order_uid, order_payload)
         tracked = self.store.save_new(
@@ -256,10 +249,7 @@ class CoWConnector:
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
-        if self.signer is None:
-            tracked.metadata["signing_mode"] = "connector-signed-offchain"
-        else:
-            tracked.metadata["signing_mode"] = "hummingbot-managed"
+        tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
@@ -328,6 +318,18 @@ class CoWConnector:
         if int(allowance) < int(sell_amount):
             message = f"insufficient {sell_token.symbol} allowance for CoW VaultRelayer"
             raise InsufficientAllowanceError(message)
+
+    def _sign_order_payload(
+        self,
+        order_payload: dict[str, object],
+        expected_order_payload: dict[str, object],
+    ) -> dict[str, object]:
+        if self.signer is None:
+            message = "CoW order submission requires a Hummingbot-managed signer"
+            raise ValueError(message)
+        signed_order = self.signer.sign_order_payload(order_payload)
+        _verify_signed_order_fields(signed_order, expected_order_payload)
+        return signed_order
 
 
 def _map_order_state(status: str, executed_sell: str, executed_buy: str) -> OrderState:

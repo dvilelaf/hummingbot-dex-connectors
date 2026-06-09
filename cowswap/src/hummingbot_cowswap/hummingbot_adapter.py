@@ -302,7 +302,7 @@ class HummingbotCoWAdapter:
         tracked = await self._connector.cancel_order(client_order_id)
         self._in_flight_orders[client_order_id] = tracked
         self._emit_order_event(
-            "OrderCancelled",
+            _hummingbot_order_event_tag(tracked),
             tracked,
             context=_OrderEventContext(client_order_id=client_order_id),
         )
