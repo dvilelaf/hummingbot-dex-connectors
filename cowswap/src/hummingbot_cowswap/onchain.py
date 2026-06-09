@@ -59,3 +59,23 @@ class ApprovalPolicy:
             "spender": self.chain.vault_relayer,
             "amount": amount,
         }
+
+    def build_revoke_transaction(self, *, token: CoWToken, owner: str) -> dict[str, str]:
+        """Return an ERC-20 approve-zero transaction intent for the VaultRelayer."""
+        return self.build_approval_transaction(token=token, owner=owner, amount="0")
+
+    def build_allowance_reset_sequence(
+        self,
+        *,
+        token: CoWToken,
+        owner: str,
+        amount: str,
+        current_allowance: str,
+        reset_first: bool,
+    ) -> tuple[dict[str, str], ...]:
+        """Return revoke+approve intents for tokens that require zero-first approvals."""
+        approval = self.build_approval_transaction(token=token, owner=owner, amount=amount)
+        if reset_first and int(current_allowance) > 0 and int(amount) > 0:
+            revoke = self.build_revoke_transaction(token=token, owner=owner)
+            return (revoke, approval)
+        return (approval,)

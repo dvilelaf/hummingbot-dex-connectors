@@ -40,7 +40,7 @@
 - [x] Implement balance checks.
 - [x] Implement ERC-20 allowance checks against the per-chain `GPv2VaultRelayer`.
 - [x] Implement approval transaction intent planning to the verified `GPv2VaultRelayer` with exact allowance amount.
-- [ ] Implement allowance reset/revoke behavior where token behavior requires it.
+- [x] Implement allowance reset/revoke behavior where token behavior requires it.
 - [x] Surface insufficient allowance separately from quote, signing, and settlement failures.
 - [x] Implement quote request creation for sell orders.
 - [x] Implement quote response parsing.

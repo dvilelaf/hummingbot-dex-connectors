@@ -204,6 +204,38 @@ def test_build_approval_transaction_targets_verified_vault_relayer() -> None:
     assert tx["amount"] == "1000000"
 
 
+def test_build_allowance_reset_sequence_revokes_before_approval_when_required() -> None:
+    """Zero-first token approvals are planned as revoke then exact approval."""
+    policy = ApprovalPolicy(chain_config(8453, "prod"))
+
+    sequence = policy.build_allowance_reset_sequence(
+        token=USDC,
+        owner=OWNER,
+        amount="1000000",
+        current_allowance="5",
+        reset_first=True,
+    )
+
+    assert [tx["amount"] for tx in sequence] == ["0", "1000000"]
+    assert {tx["spender"] for tx in sequence} == {"0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"}
+
+
+def test_build_allowance_reset_sequence_skips_revoke_when_not_required() -> None:
+    """Standard ERC-20 approvals remain a single exact approval intent."""
+    policy = ApprovalPolicy(chain_config(8453, "prod"))
+
+    sequence = policy.build_allowance_reset_sequence(
+        token=USDC,
+        owner=OWNER,
+        amount="1000000",
+        current_allowance="5",
+        reset_first=False,
+    )
+
+    assert len(sequence) == 1
+    assert sequence[0]["amount"] == "1000000"
+
+
 @pytest.mark.asyncio
 async def test_submit_rejects_stale_quote_before_post(tmp_path: Path) -> None:
     """Expired quotes are rejected before order posting."""
