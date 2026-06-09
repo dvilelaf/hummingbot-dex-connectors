@@ -48,7 +48,9 @@ class FakeCoWClient:
         self.cancelled_uids: list[str] = []
         self.cancellations: list[dict[str, object] | None] = []
         self.status = cow_order(status="open", executed_sell="0", executed_buy="0")
+        self.status_sequence: list[object] = []
         self.trades: list[object] = []
+        self.status_polls = 0
 
     async def quote_sell(self, request: dict[str, object]) -> object:
         self.quote_requests.append(request)
@@ -78,6 +80,9 @@ class FakeCoWClient:
 
     async def get_order_status(self, order_uid: str) -> object:
         assert order_uid
+        self.status_polls += 1
+        if self.status_sequence:
+            return self.status_sequence.pop(0)
         return self.status
 
     async def get_trades(self, order_uid: str) -> list[object]:
@@ -186,6 +191,42 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert recovered.order_uid == tracked.order_uid
     assert recovered.fee_amount == "1234"
     assert recovered.state is OrderState.OPEN
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_and_wait_polls_until_settled_fill_before_returning_success(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    client.status_sequence = [
+        cow_order(status="open", executed_sell="0", executed_buy="0"),
+        cow_order(
+            status="fulfilled",
+            executed_sell="1000000",
+            executed_buy="500000000000000000",
+        ),
+    ]
+    client.trades = [cow_trade(tx_hash="0xsettled")]
+    cow = connector(tmp_path, client)
+
+    tracked = await cow.submit_sell_order_and_wait(
+        SellOrderRequest(
+            client_order_id="cid-sell-wait",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        ),
+        max_polls=2,
+    )
+
+    assert client.posted_orders[0]["kind"] == "sell"
+    assert client.posted_orders[0]["buy_amount"] == "497500000000000000"
+    assert client.status_polls == 2
+    assert tracked.state is OrderState.FILLED
+    assert tracked.executed_sell == "1000000"
+    assert tracked.executed_buy == "500000000000000000"
+    assert tracked.settlement_tx_hash == "0xsettled"
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,8 @@ class FakeConnector:
     def __init__(self) -> None:
         self.submitted: list[BuyOrderRequest | SellOrderRequest] = []
         self.cancelled: list[str] = []
+        self.polls: list[str] = []
+        self.poll_updates: list[object] = []
 
     async def submit_sell_order(self, request: SellOrderRequest) -> object:
         self.submitted.append(request)
@@ -40,6 +42,10 @@ class FakeConnector:
     async def cancel_order(self, client_order_id: str) -> object:
         self.cancelled.append(client_order_id)
         return {"client_order_id": client_order_id, "state": "cancelled"}
+
+    async def poll_order(self, client_order_id: str) -> object:
+        self.polls.append(client_order_id)
+        return self.poll_updates.pop(0)
 
 
 def test_adapter_exposes_conservative_hummingbot_contract() -> None:
@@ -171,6 +177,32 @@ async def test_adapter_emits_hummingbot_style_create_and_cancel_events() -> None
     assert adapter.event_log[0].order_type == "MARKET"
     assert adapter.event_log[0].order_state == "OPEN"
     assert adapter.event_log[1].order_state == "CANCELED"
+
+
+@pytest.mark.asyncio
+async def test_sell_can_wait_for_settlement_before_emitting_filled_success() -> None:
+    connector = FakeConnector()
+    filled_order = _tracked_order("cid-settled", OrderState.FILLED)
+    connector.poll_updates = [filled_order]
+    adapter = HummingbotCoWAdapter(connector, {"USDC-WETH": (USDC, WETH)})
+
+    result = await adapter.sell(
+        "USDC-WETH",
+        Decimal("1.25"),
+        client_order_id="cid-settled",
+        wait_for_settlement=True,
+    )
+
+    assert connector.polls == ["cid-settled"]
+    assert result == filled_order
+    assert adapter.in_flight_orders["cid-settled"] == filled_order
+    assert adapter.order_statuses == {"cid-settled": "FILLED"}
+    assert [event.event_tag for event in adapter.event_log] == [
+        "SellOrderCreated",
+        "OrderFilled",
+    ]
+    assert adapter.event_log[-1].client_order_id == "cid-settled"
+    assert adapter.event_log[-1].order_state == "FILLED"
 
 
 def test_adapter_maps_order_updates_to_hummingbot_style_events() -> None:

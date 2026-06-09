@@ -70,6 +70,10 @@ class OrderConnector(Protocol):
         """Cancel an order by Hummingbot client order ID."""
         ...
 
+    async def poll_order(self, client_order_id: str) -> object:
+        """Poll an order by Hummingbot client order ID."""
+        ...
+
 
 @dataclass(frozen=True)
 class HummingbotTradingRule:
@@ -212,6 +216,12 @@ class HummingbotCoWAdapter:
     ) -> object:
         """Convert a Hummingbot-style SELL submission into a SellOrderRequest."""
         _reject_private_key_material(kwargs)
+        wait_for_settlement = bool(kwargs.pop("wait_for_settlement", False))
+        max_status_polls_value = kwargs.pop("max_status_polls", 1)
+        if not isinstance(max_status_polls_value, int | str):
+            message = "max_status_polls must be an integer"
+            raise TypeError(message)
+        max_status_polls = int(max_status_polls_value)
         if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
             message = f"unsupported order_type for CoW shim: {order_type}"
             raise ValueError(message)
@@ -239,6 +249,11 @@ class HummingbotCoWAdapter:
                 amount=str(amount),
             ),
         )
+        if wait_for_settlement:
+            tracked = await self._poll_until_terminal(
+                request.client_order_id,
+                max_polls=max_status_polls,
+            )
         return tracked
 
     async def buy(
@@ -303,6 +318,21 @@ class HummingbotCoWAdapter:
             order,
             context=_OrderEventContext(client_order_id=client_order_id),
         )
+
+    async def _poll_until_terminal(self, client_order_id: str, *, max_polls: int) -> object:
+        if max_polls < 1:
+            message = "max_status_polls must be at least 1"
+            raise ValueError(message)
+
+        order = self._in_flight_orders[client_order_id]
+        for _ in range(max_polls):
+            order = await self._connector.poll_order(client_order_id)
+            self.record_order_update(order)
+            if _is_terminal_order(order):
+                return order
+
+        message = f"order {client_order_id} did not reach a terminal CoW state"
+        raise TimeoutError(message)
 
     def _tokens_for_pair(self, trading_pair: str) -> tuple[CoWToken, CoWToken]:
         normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
@@ -378,6 +408,18 @@ def _hummingbot_order_event_tag(order: object) -> str:
         if normalized == local_state.value:
             return event_tag
     return "OrderUpdated"
+
+
+def _is_terminal_order(order: object) -> bool:
+    state = _order_value(order, "state")
+    if isinstance(state, OrderState):
+        return state in {
+            OrderState.FILLED,
+            OrderState.CANCELLED,
+            OrderState.EXPIRED,
+            OrderState.FAILED,
+        }
+    return str(state).upper() in {"FILLED", "CANCELLED", "CANCELED", "EXPIRED", "FAILED"}
 
 
 def _order_client_order_id(order: object) -> str:

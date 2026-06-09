@@ -44,6 +44,12 @@ _RAW_COW_STATUS_MAP = {
     "cancelled": OrderState.CANCELLED,
     "expired": OrderState.EXPIRED,
 }
+TERMINAL_ORDER_STATES = {
+    OrderState.FILLED,
+    OrderState.CANCELLED,
+    OrderState.EXPIRED,
+    OrderState.FAILED,
+}
 
 
 class CoWConnector:
@@ -180,6 +186,16 @@ class CoWConnector:
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
 
+    async def submit_sell_order_and_wait(
+        self,
+        request: SellOrderRequest,
+        *,
+        max_polls: int = 1,
+    ) -> TrackedOrder:
+        """Submit a sell order, then poll until CoW reports a terminal settlement state."""
+        tracked = await self.submit_sell_order(request)
+        return await self.wait_for_terminal_order(tracked.client_order_id, max_polls=max_polls)
+
     async def submit_buy_order(self, request: BuyOrderRequest) -> TrackedOrder:
         """Quote, optionally sign, post, persist, and return a tracked buy order."""
         if self.store.load(request.client_order_id) is not None:
@@ -260,6 +276,26 @@ class CoWConnector:
         tracked.state = _map_order_state(raw_status, executed_sell, executed_buy)
         tracked.settlement_tx_hash = _first_tx_hash(trades)
         return self.store.save(tracked)
+
+    async def wait_for_terminal_order(
+        self,
+        client_order_id: str,
+        *,
+        max_polls: int = 1,
+    ) -> TrackedOrder:
+        """Poll an existing order until it reaches a terminal local state."""
+        if max_polls < 1:
+            message = "max_polls must be at least 1"
+            raise ValueError(message)
+
+        tracked = self._load_order(client_order_id)
+        for _ in range(max_polls):
+            tracked = await self.poll_order(client_order_id)
+            if tracked.state in TERMINAL_ORDER_STATES:
+                return tracked
+
+        message = f"order {client_order_id} did not reach a terminal CoW state"
+        raise TimeoutError(message)
 
     async def cancel_order(self, client_order_id: str) -> TrackedOrder:
         """Request cancellation through the client and reconcile the final state."""
