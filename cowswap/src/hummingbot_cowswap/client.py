@@ -26,8 +26,12 @@ class CoWClient(Protocol):
         """Request a CoW sell quote using connector-normalized fields."""
         ...
 
+    async def quote_buy(self, request: dict[str, object]) -> object:
+        """Request a CoW buy quote using connector-normalized fields."""
+        ...
+
     async def post_sell_order(self, order: dict[str, object]) -> str:
-        """Post a signed CoW sell order and return the CoW order UID."""
+        """Post a signed CoW order and return the CoW order UID."""
         ...
 
     async def get_order_status(self, order_uid: str) -> object:
@@ -88,6 +92,43 @@ class CowDaoOrderBookClient:
             ),
         )
 
+    async def quote_buy(self, request: dict[str, object]) -> object:
+        """Build and submit a cowdao-cowpy buy quote request."""
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.order_book.generated.model import (
+            BuyTokenDestination,
+            OrderQuoteRequest,
+            OrderQuoteSide3,
+            OrderQuoteSideKindBuy,
+            OrderQuoteValidity1,
+            PriceQuality,
+            SellTokenSource,
+            SigningScheme,
+            TokenAmount,
+        )
+
+        return await _call_order_book(
+            "quote_buy",
+            self._order_book_api().post_quote(
+                OrderQuoteRequest(
+                    sellToken=str(request["sell_token"]),
+                    buyToken=str(request["buy_token"]),
+                    receiver=str(request["receiver"]),
+                    from_=str(request["owner"]),
+                    appData=str(request["app_data"]),
+                    sellTokenBalance=SellTokenSource.erc20,
+                    buyTokenBalance=BuyTokenDestination.erc20,
+                    priceQuality=PriceQuality.verified,
+                    signingScheme=SigningScheme.eip712,
+                ),
+                OrderQuoteSide3(
+                    kind=OrderQuoteSideKindBuy.buy,
+                    buyAmountAfterFee=TokenAmount(str(request["buy_amount"])),
+                ),
+                OrderQuoteValidity1(validTo=request["valid_to"]),
+            ),
+        )
+
     async def post_sell_order(self, order: dict[str, object]) -> str:
         """Build and submit a cowdao-cowpy signed order request."""
         signature = order.get("signature")
@@ -104,6 +145,7 @@ class CowDaoOrderBookClient:
             SigningScheme,
         )
 
+        order_kind = _order_kind(OrderKind, str(order.get("kind", "sell")))
         order_creation = OrderCreation(
             sellToken=str(order["sell_token"]),
             buyToken=str(order["buy_token"]),
@@ -112,7 +154,7 @@ class CowDaoOrderBookClient:
             buyAmount=str(order["buy_amount"]),
             feeAmount=str(order["fee_amount"]),
             validTo=int(order["valid_to"]),
-            kind=OrderKind.sell,
+            kind=order_kind,
             partiallyFillable=bool(order["partially_fillable"]),
             sellTokenBalance=SellTokenSource.erc20,
             buyTokenBalance=BuyTokenDestination.erc20,
@@ -209,3 +251,12 @@ def _looks_like_timeout(exc: Exception) -> bool:
     """Return whether cowpy wrapped a timeout as an unexpected response."""
     message = str(exc).lower()
     return "timeout" in message or "timed out" in message
+
+
+def _order_kind(order_kind_enum: object, kind: str) -> object:
+    """Resolve connector string kind into cowpy's generated OrderKind enum."""
+    try:
+        return getattr(order_kind_enum, kind)
+    except AttributeError as exc:
+        message = f"unsupported CoW order kind: {kind}"
+        raise ValueError(message) from exc

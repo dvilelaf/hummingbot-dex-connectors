@@ -45,7 +45,7 @@ class CowPyEip712Signer:
             valid_to=int(order["valid_to"]),
             app_data=str(order["app_data"]),
             fee_amount=str(order["fee_amount"]),
-            kind="sell",
+            kind=str(order.get("kind", "sell")),
             partially_fillable=bool(order["partially_fillable"]),
             sell_token_balance="erc20",
             buy_token_balance="erc20",

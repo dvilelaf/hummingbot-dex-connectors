@@ -16,6 +16,7 @@ from hummingbot_cowswap import (
     OrderState,
     SellOrderRequest,
 )
+from hummingbot_cowswap.models import BuyOrderRequest
 from hummingbot_cowswap.persistence import JsonOrderStore
 from hummingbot_cowswap.signing import settlement_contract
 
@@ -46,6 +47,17 @@ class FakeCoWClient:
         self.quote_requests.append(request)
         return cow_quote(
             quote_id=99,
+            sell_amount="1000000",
+            buy_amount="500000000000000000",
+            fee_amount="0",
+            valid_to=1_900_000_000,
+            verified=True,
+        )
+
+    async def quote_buy(self, request: dict[str, object]) -> object:
+        self.quote_requests.append(request)
+        return cow_quote(
+            quote_id=100,
             sell_amount="1000000",
             buy_amount="500000000000000000",
             fee_amount="0",
@@ -113,6 +125,30 @@ async def test_quote_sell_normalizes_amounts_and_translates_slippage(tmp_path: P
 
 
 @pytest.mark.asyncio
+async def test_quote_buy_normalizes_amounts_and_translates_slippage(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+
+    quote, maximum_sell_amount = await cow.quote_buy(BASE_USDC, BASE_WETH, "0.5")
+
+    assert client.quote_requests == [
+        {
+            "chain_id": 8453,
+            "sell_token": BASE_USDC.address,
+            "buy_token": BASE_WETH.address,
+            "owner": "0x00000000000000000000000000000000000000aa",
+            "receiver": "0x00000000000000000000000000000000000000aa",
+            "buy_amount": "500000000000000000",
+            "app_data": "0x" + "00" * 32,
+            "valid_to": None,
+        }
+    ]
+    assert quote.quote.sellAmount.root == "1000000"
+    assert quote.quote.buyAmount.root == "500000000000000000"
+    assert maximum_sell_amount == "1005000"
+
+
+@pytest.mark.asyncio
 async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state(
     tmp_path: Path,
 ) -> None:
@@ -137,6 +173,37 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert client.posted_orders[0]["quote_id"] == 99
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-1")
+    assert recovered is not None
+    assert recovered.order_uid == tracked.order_uid
+    assert recovered.state is OrderState.OPEN
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_order_posts_quote_derived_order_and_tracks_open_state(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+
+    tracked = await cow.submit_buy_order(
+        BuyOrderRequest(
+            client_order_id="cid-buy-1",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="0.5",
+        )
+    )
+
+    assert tracked.state is OrderState.OPEN
+    assert tracked.client_order_id == "cid-buy-1"
+    assert tracked.order_uid.startswith("0xaaaa")
+    assert client.posted_orders[0]["kind"] == "buy"
+    assert client.posted_orders[0]["sell_amount"] == "1005000"
+    assert client.posted_orders[0]["buy_amount"] == "500000000000000000"
+    assert client.posted_orders[0]["quote_id"] == 100
+
+    recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-buy-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
     assert recovered.state is OrderState.OPEN
@@ -172,6 +239,42 @@ async def test_submit_sell_order_signs_with_cowpy_eip712_dummy_account(tmp_path:
     )
 
     posted = client.posted_orders[0]
+    assert posted["signing_scheme"] == "eip712"
+    assert posted["signature"].startswith("0x")
+    assert len(posted["signature"]) == 132
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_order_signs_with_cowpy_eip712_dummy_account(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    account = Account.create()
+    config = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+        slippage_bps=50,
+    )
+    cow = CoWConnector(
+        config=config,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=config, account=account),
+    )
+
+    await cow.submit_buy_order(
+        BuyOrderRequest(
+            client_order_id="cid-buy-signed",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="0.5",
+        )
+    )
+
+    posted = client.posted_orders[0]
+    assert posted["kind"] == "buy"
     assert posted["signing_scheme"] == "eip712"
     assert posted["signature"].startswith("0x")
     assert len(posted["signature"]) == 132

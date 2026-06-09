@@ -82,6 +82,18 @@ class SellOrderRequest(BaseModel):
     partially_fillable: bool = False
 
 
+class BuyOrderRequest(BaseModel):
+    """Connector-level request for a quoted CoW buy order."""
+
+    client_order_id: str
+    trading_pair: str
+    sell_token: CoWToken
+    buy_token: CoWToken
+    amount: str
+    valid_to: int | None = None
+    partially_fillable: bool = False
+
+
 class TrackedOrder(BaseModel):
     """Persisted local metadata needed to recover and reconcile a CoW order."""
 
@@ -131,3 +143,9 @@ def amount_to_atomic(amount: str, decimals: int) -> str:
 def apply_slippage_bps(amount: str, slippage_bps: int) -> str:
     """Apply basis-point slippage to an atomic buy amount."""
     return str(int(amount) * (MAX_SLIPPAGE_BPS - slippage_bps) // MAX_SLIPPAGE_BPS)
+
+
+def apply_buy_slippage_bps(amount: str, slippage_bps: int) -> str:
+    """Apply basis-point slippage to an atomic maximum sell amount."""
+    numerator = int(amount) * (MAX_SLIPPAGE_BPS + slippage_bps)
+    return str((numerator + MAX_SLIPPAGE_BPS - 1) // MAX_SLIPPAGE_BPS)

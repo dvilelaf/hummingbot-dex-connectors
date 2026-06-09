@@ -16,12 +16,14 @@ from hummingbot_cowswap.errors import (
     UnsupportedTokenError,
 )
 from hummingbot_cowswap.models import (
+    BuyOrderRequest,
     CoWConfig,
     CoWToken,
     OrderState,
     SellOrderRequest,
     TrackedOrder,
     amount_to_atomic,
+    apply_buy_slippage_bps,
     apply_slippage_bps,
 )
 
@@ -80,6 +82,29 @@ class CoWConnector:
         )
         return quote, apply_slippage_bps(_quote_buy_amount(quote), self.config.slippage_bps)
 
+    async def quote_buy(
+        self,
+        sell_token: CoWToken,
+        buy_token: CoWToken,
+        amount: str,
+        valid_to: int | None = None,
+    ) -> tuple[object, str]:
+        """Request a buy quote and return the quote plus slippage-adjusted maximum sell."""
+        _validate_order_tokens(sell_token, buy_token)
+        quote = await self.client.quote_buy(
+            {
+                "chain_id": self.config.chain_id,
+                "sell_token": sell_token.address,
+                "buy_token": buy_token.address,
+                "owner": self.config.owner,
+                "receiver": self.config.receiver,
+                "buy_amount": amount_to_atomic(amount, buy_token.decimals),
+                "app_data": self.config.app_data,
+                "valid_to": valid_to or self.config.valid_to,
+            }
+        )
+        return quote, apply_buy_slippage_bps(_quote_sell_amount(quote), self.config.slippage_bps)
+
     async def submit_sell_order(self, request: SellOrderRequest) -> TrackedOrder:
         """Quote, optionally sign, post, persist, and return a tracked sell order."""
         if self.store.load(request.client_order_id) is not None:
@@ -129,6 +154,64 @@ class CoWConnector:
             buy_token=request.buy_token,
             sell_amount=_quote_sell_amount(quote),
             buy_amount=minimum_buy_amount,
+            valid_to=quote_valid_to,
+            quote_id=_quote_id(quote),
+            digest=_digest_from_uid(order_uid),
+            signing_scheme="eip712",
+            partially_fillable=request.partially_fillable,
+        )
+        tracked.state = OrderState.OPEN
+        return self.store.save(tracked)
+
+    async def submit_buy_order(self, request: BuyOrderRequest) -> TrackedOrder:
+        """Quote, optionally sign, post, persist, and return a tracked buy order."""
+        if self.store.load(request.client_order_id) is not None:
+            message = f"duplicate client_order_id: {request.client_order_id}"
+            raise DuplicateOrderError(message)
+
+        _validate_order_tokens(request.sell_token, request.buy_token)
+        _validate_chain(self.config)
+        quote, maximum_sell_amount = await self.quote_buy(
+            request.sell_token,
+            request.buy_token,
+            request.amount,
+            request.valid_to,
+        )
+        quote_valid_to = _quote_valid_to(quote)
+        if quote_valid_to <= int(self.clock()):
+            message = f"stale CoW quote valid_to={quote_valid_to}"
+            raise StaleQuoteError(message)
+        self._preflight_sell(request.sell_token, maximum_sell_amount)
+        order_payload = {
+            "chain_id": self.config.chain_id,
+            "sell_token": request.sell_token.address,
+            "buy_token": request.buy_token.address,
+            "owner": self.config.owner,
+            "receiver": self.config.receiver,
+            "sell_amount": maximum_sell_amount,
+            "buy_amount": _quote_buy_amount(quote),
+            "fee_amount": "0",
+            "valid_to": quote_valid_to,
+            "quote_id": _quote_id(quote),
+            "app_data": self.config.app_data,
+            "kind": "buy",
+            "partially_fillable": request.partially_fillable,
+            "signing_scheme": "eip712",
+        }
+        if self.signer is not None:
+            order_payload = self.signer.sign_order_payload(order_payload)
+        order_uid = await self.client.post_sell_order(order_payload)
+        tracked = self.store.save_new(
+            client_order_id=request.client_order_id,
+            trading_pair=request.trading_pair,
+            order_uid=order_uid,
+            owner=self.config.owner,
+            receiver=self.config.receiver,
+            chain_id=self.config.chain_id,
+            sell_token=request.sell_token,
+            buy_token=request.buy_token,
+            sell_amount=maximum_sell_amount,
+            buy_amount=_quote_buy_amount(quote),
             valid_to=quote_valid_to,
             quote_id=_quote_id(quote),
             digest=_digest_from_uid(order_uid),
@@ -199,6 +282,10 @@ def _map_order_state(status: str, executed_sell: str, executed_buy: str) -> Orde
 def _validate_order_tokens(sell_token: CoWToken, buy_token: CoWToken) -> None:
     _validate_token(sell_token)
     _validate_token(buy_token)
+
+
+def _validate_chain(config: CoWConfig) -> None:
+    chain_config(config.chain_id, config.env)
 
 
 def _validate_token(token: CoWToken) -> None:

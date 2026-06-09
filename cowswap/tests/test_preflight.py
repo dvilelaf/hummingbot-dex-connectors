@@ -17,6 +17,7 @@ from hummingbot_cowswap.errors import (
     UnsupportedChainError,
     UnsupportedTokenError,
 )
+from hummingbot_cowswap.models import BuyOrderRequest
 from hummingbot_cowswap.onchain import ApprovalPolicy, FakeEvmReader
 from hummingbot_cowswap.persistence import JsonOrderStore
 
@@ -46,6 +47,20 @@ class FakeClient:
         self.quote_requests.append(request)
         return SimpleNamespace(
             id=99,
+            verified=True,
+            quote=SimpleNamespace(
+                sellAmount=SimpleNamespace(root="1000000"),
+                buyAmount=SimpleNamespace(root="500000000000000000"),
+                feeAmount=SimpleNamespace(root="0"),
+                validTo=self.valid_to,
+            ),
+        )
+
+    async def quote_buy(self, request: dict[str, object]) -> object:
+        """Return a minimal cowpy-shaped buy quote."""
+        self.quote_requests.append(request)
+        return SimpleNamespace(
+            id=100,
             verified=True,
             quote=SimpleNamespace(
                 sellAmount=SimpleNamespace(root="1000000"),
@@ -92,6 +107,17 @@ def request(client_order_id: str = "cid-1") -> SellOrderRequest:
         sell_token=USDC,
         buy_token=WETH,
         amount="1.0",
+    )
+
+
+def buy_request(client_order_id: str = "cid-buy-1") -> BuyOrderRequest:
+    """Build a buy order request."""
+    return BuyOrderRequest(
+        client_order_id=client_order_id,
+        trading_pair="USDC-WETH",
+        sell_token=USDC,
+        buy_token=WETH,
+        amount="0.5",
     )
 
 
@@ -202,5 +228,33 @@ async def test_submit_rejects_duplicate_client_order_id(tmp_path: Path) -> None:
 
     with pytest.raises(DuplicateOrderError):
         await cow.submit_sell_order(request("cid-dup"))
+
+    assert len(client.posted_orders) == 1
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_rejects_stale_quote_before_post(tmp_path: Path) -> None:
+    """Expired buy quotes are rejected before order posting."""
+    client = FakeClient(valid_to=1)
+    reader = FakeEvmReader(balance="1005000", allowance="1005000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+
+    with pytest.raises(StaleQuoteError):
+        await cow.submit_buy_order(buy_request())
+
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_rejects_duplicate_client_order_id(tmp_path: Path) -> None:
+    """Duplicate buy client order IDs are rejected before submitting a second order."""
+    reader = FakeEvmReader(balance="1005000", allowance="1005000")
+    client = FakeClient()
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+
+    await cow.submit_buy_order(buy_request("cid-buy-dup"))
+
+    with pytest.raises(DuplicateOrderError):
+        await cow.submit_buy_order(buy_request("cid-buy-dup"))
 
     assert len(client.posted_orders) == 1
