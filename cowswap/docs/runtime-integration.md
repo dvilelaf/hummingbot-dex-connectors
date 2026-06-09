@@ -150,8 +150,9 @@ For the MVP, Hummingbot API should report:
 - supported order types: `MARKET` for swap-style buy/sell orders only, unless the
   Hummingbot connector implementation maps CoW intents to a stricter type.
 - supported trade types: `BUY`, `SELL`
-- supported chain: Base mainnet, chain ID `8453`
-- token scope: configured ERC-20 tokens and WETH on Base.
+- supported chains: Ethereum `1`, Gnosis `100`, Polygon `137`, Base `8453`,
+  Arbitrum One `42161`, Avalanche C-Chain `43114`, and BNB Smart Chain `56`.
+- token scope: configured ERC-20 tokens and WETH on the selected chain.
 
 Trading rules should expose conservative minimums derived from token metadata
 and CoW API quote constraints. Unknown limits should fail readiness rather than
@@ -205,7 +206,8 @@ Ledger rules:
 
 ## MVP Limitations
 
-- Base mainnet only.
+- Supported chains are Ethereum, Gnosis, Polygon, Base, Arbitrum One,
+  Avalanche C-Chain, and BNB Smart Chain.
 - Buy and sell orders only.
 - ERC-20/WETH only; native ETH flow is a separate feature.
 - No generic limit-order support until the Hummingbot order-type mapping is

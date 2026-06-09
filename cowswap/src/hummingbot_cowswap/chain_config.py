@@ -13,6 +13,15 @@ STAGING_SETTLEMENT_CONTRACT = "0xf553d092b50bdcbddeD1A99aF2cA29FBE5E2CB13"
 PROD_VAULT_RELAYER = "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"
 STAGING_VAULT_RELAYER = PROD_VAULT_RELAYER
 BASE_CHAIN_ID = 8453
+SUPPORTED_CHAINS = {
+    1: ("ethereum", "mainnet"),
+    100: ("gnosis", "xdai"),
+    137: ("polygon", "polygon"),
+    8453: ("base", "base"),
+    42161: ("arbitrum", "arbitrum_one"),
+    43114: ("avalanche", "avalanche"),
+    56: ("bnb", "bnb"),
+}
 
 
 @dataclass(frozen=True)
@@ -39,17 +48,19 @@ def chain_config(chain_id: int, env: str) -> ChainConfig:
     if normalized_env not in {"prod", "staging"}:
         message = f"unsupported CoW API env: {env}"
         raise UnsupportedChainError(message)
-    if chain_id != BASE_CHAIN_ID:
+    chain = SUPPORTED_CHAINS.get(chain_id)
+    if chain is None:
         message = f"unsupported CoW chain_id: {chain_id}"
         raise UnsupportedChainError(message)
 
     is_staging = normalized_env == "staging"
-    base_url = "https://barn.api.cow.fi/base" if is_staging else "https://api.cow.fi/base"
+    chain_name, api_slug = chain
+    api_host = "https://barn.api.cow.fi" if is_staging else "https://api.cow.fi"
     return ChainConfig(
-        chain_id=BASE_CHAIN_ID,
-        chain_name="base",
+        chain_id=chain_id,
+        chain_name=chain_name,
         env=normalized_env,
-        order_book_url=base_url,
+        order_book_url=f"{api_host}/{api_slug}",
         settlement_contract=STAGING_SETTLEMENT_CONTRACT if is_staging else PROD_SETTLEMENT_CONTRACT,
         vault_relayer=STAGING_VAULT_RELAYER if is_staging else PROD_VAULT_RELAYER,
     )

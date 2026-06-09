@@ -26,7 +26,7 @@
 
 - [ ] Define connector boundary as a Python spot-style Hummingbot connector installed in the Hummingbot API/runtime layer, not imported directly by Marlin.
 - [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
-- [x] Define MVP chain as Base mainnet only.
+- [x] Define supported MVP chain set and default local examples around Base mainnet.
 - [x] Define MVP token scope as ERC-20/WETH only.
 - [x] Decide whether `cowdao-cowpy` is acceptable as a dependency for the MVP adapter, with caveats documented.
 - [x] Review `cowdao-cowpy` license compatibility.
@@ -100,15 +100,15 @@
 
 ## Additional Chain Support
 
-- [ ] Add Ethereum mainnet support.
-- [ ] Add Arbitrum support if needed.
-- [ ] Add Gnosis Chain support if needed.
-- [ ] Add Polygon support if needed.
-- [ ] Add Avalanche support if needed.
-- [ ] Add BNB support if needed.
-- [ ] Validate CoW API endpoints per chain.
-- [ ] Validate settlement/verifying contract addresses per chain.
-- [ ] Validate `GPv2VaultRelayer` addresses per chain.
+- [x] Add Ethereum mainnet support.
+- [x] Add Arbitrum support if needed.
+- [x] Add Gnosis Chain support if needed.
+- [x] Add Polygon support if needed.
+- [x] Add Avalanche support if needed.
+- [x] Add BNB support if needed.
+- [x] Validate CoW API endpoints per chain.
+- [x] Validate settlement/verifying contract addresses per chain.
+- [x] Validate `GPv2VaultRelayer` addresses per chain.
 - [ ] Verify configured contract addresses by chain ID, checksum, deployed code, ABI compatibility, proxy status where applicable, and official sources.
 
 ## Production Hardening

@@ -69,9 +69,18 @@ curl -fsS $AUTH -X POST "$HB_API/trading/orders" \
 
 Use `"trade_type": "BUY"` with the same shape for a market-style buy intent.
 
+Supported chains:
+
+- Ethereum mainnet `1`
+- Gnosis Chain `100`
+- Polygon `137`
+- Base `8453`
+- Arbitrum One `42161`
+- Avalanche C-Chain `43114`
+- BNB Smart Chain `56`
+
 Live limitations:
 
-- Base mainnet only, chain ID `8453`.
 - Buy/sell ERC-20/WETH only; no native ETH or generic limit orders.
 - Submitted signed intents are not fills; final ledgers need terminal
   order/trade/settlement evidence.

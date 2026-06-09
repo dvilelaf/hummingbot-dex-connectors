@@ -26,6 +26,32 @@ def test_base_staging_chain_config_uses_barn_endpoint_and_staging_domain() -> No
     assert config.vault_relayer == "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"
 
 
+@pytest.mark.parametrize(
+    ("chain_id", "chain_name", "api_slug"),
+    [
+        (1, "ethereum", "mainnet"),
+        (100, "gnosis", "xdai"),
+        (137, "polygon", "polygon"),
+        (8453, "base", "base"),
+        (42161, "arbitrum", "arbitrum_one"),
+        (43114, "avalanche", "avalanche"),
+        (56, "bnb", "bnb"),
+    ],
+)
+def test_supported_prod_chain_configs_use_verified_core_addresses(
+    chain_id: int,
+    chain_name: str,
+    api_slug: str,
+) -> None:
+    """Supported prod chains use CoW API slugs and deterministic core addresses."""
+    config = chain_config(chain_id, "prod")
+
+    assert config.chain_name == chain_name
+    assert config.order_book_url == f"https://api.cow.fi/{api_slug}"
+    assert config.settlement_contract == "0x9008D19f58AAbD9eD0D60971565AA8510560ab41"
+    assert config.vault_relayer == "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"
+
+
 def test_chain_config_rejects_invalid_contract_addresses() -> None:
     """Malformed configured contracts fail at config construction time."""
     with pytest.raises(UnsupportedChainError, match="settlement_contract"):
