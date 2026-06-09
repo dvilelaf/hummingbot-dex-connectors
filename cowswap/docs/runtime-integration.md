@@ -59,8 +59,9 @@ logs, or artifacts.
 Compose must run a custom `hummingbot-api` image that installs this package into
 the same Python environment used by `uvicorn`. Acceptable patterns are:
 
-- build context includes the `cowswap` package and runs
-  `pip install /path/to/cowswap` or `pip install -e /path/to/cowswap`;
+- build this repository with `cowswap/docker/hummingbot-api.Dockerfile`, which
+  copies the `cowswap` package into the Hummingbot API image and runs
+  `pip install ./cowswap`;
 - a read-only bind mount provides `cowswap`, and container startup installs it
   before launching `uvicorn`.
 
@@ -68,6 +69,18 @@ The install is valid only when `python -c "import hummingbot_cowswap"` succeeds
 inside the `hummingbot-api` container and `GET /connectors/` includes
 `cowswap`. Marlin must use a container-reachable base URL such as
 `http://hummingbot-api:8000`, not `localhost`.
+
+Build the local custom image from the repository root:
+
+```bash
+docker build \
+  -f cowswap/docker/hummingbot-api.Dockerfile \
+  -t hummingbot-api-cowswap:local \
+  .
+```
+
+Marlin Compose should then override the `hummingbot-api` image with that custom
+image, while leaving the `marlin` service image unchanged.
 
 ### Local Runtime Packaging Smoke
 

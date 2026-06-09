@@ -62,7 +62,7 @@
 
 ## Marlin Runtime Integration
 
-- [ ] Package CoW Swap into a custom Hummingbot API/runtime image, not into the Marlin Python image.
+- [x] Package CoW Swap into a custom Hummingbot API/runtime image, not into the Marlin Python image.
 - [x] Keep Marlin integration API-only: Marlin calls Hummingbot API connector endpoints by connector name.
 - [ ] Ensure the connector appears in Hummingbot API `/connectors/`.
 - [ ] Ensure Hummingbot API exposes connector metadata through `/connectors/{connector}/order-types`, `/connectors/{connector}/trading-rules`, and `/connectors/{connector}/config-map`.
