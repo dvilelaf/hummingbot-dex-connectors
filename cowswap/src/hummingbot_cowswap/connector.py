@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from time import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from hummingbot_cowswap.chain_config import chain_config
 from hummingbot_cowswap.client import CoWClient, CowDaoOrderBookClient
@@ -315,7 +315,7 @@ def _first_tx_hash(trades: list[object]) -> str | None:
     for trade in trades:
         tx_hash = _field(trade, "txHash", None) or _field(trade, "tx_hash", None)
         if tx_hash:
-            return tx_hash
+            return str(tx_hash)
     return None
 
 
@@ -371,7 +371,7 @@ def _verify_posted_order_uid(order_uid: str, order: dict[str, object]) -> None:
         message = "posted order digest does not match signed order"
         raise ValueError(message)
 
-    valid_to = int(order["valid_to"])
+    valid_to = int(cast("Any", order["valid_to"]))
     uid_valid_to = int(order_uid[-8:], 16)
     if uid_valid_to != valid_to:
         message = "posted order UID validTo does not match signed order"
@@ -379,7 +379,8 @@ def _verify_posted_order_uid(order_uid: str, order: dict[str, object]) -> None:
 
 
 def _quote_id(quote: object) -> int | None:
-    return _field(quote, "id", None)
+    quote_id = _field(quote, "id", None)
+    return None if quote_id is None else int(cast("Any", quote_id))
 
 
 def _quote_sell_amount(quote: object) -> str:
@@ -395,13 +396,13 @@ def _quote_fee_amount(quote: object) -> str:
 
 
 def _quote_valid_to(quote: object) -> int:
-    return int(_field(_field(quote, "quote"), "validTo"))
+    return int(cast("Any", _field(_field(quote, "quote"), "validTo")))
 
 
 def _order_status_values(order: object) -> tuple[str, str, str]:
     status = _field(order, "status")
     if hasattr(status, "value"):
-        status = status.value
+        status = cast("Any", status).value
     return (
         str(status),
         str(_field(order, "executedSellAmount", "0")),

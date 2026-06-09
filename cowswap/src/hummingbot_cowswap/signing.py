@@ -1,4 +1,5 @@
 """EIP-712 signing boundary for CoW orders."""
+# pyright: reportArgumentType=false
 
 from __future__ import annotations
 

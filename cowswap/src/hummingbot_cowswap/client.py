@@ -1,10 +1,11 @@
 """Thin adapter around cowdao-cowpy Order Book API calls."""
+# pyright: reportAttributeAccessIssue=false, reportArgumentType=false, reportCallIssue=false
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 from hummingbot_cowswap.errors import (
@@ -411,7 +412,7 @@ def _api_status(exc: Exception) -> int | None:
     if status is None and isinstance(response, dict):
         status = response.get("status") or response.get("status_code")
     try:
-        return int(status)
+        return int(cast("Any", status))
     except (TypeError, ValueError):
         return None
 

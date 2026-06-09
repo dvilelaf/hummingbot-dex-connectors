@@ -1021,6 +1021,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -1035,6 +1036,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pyright", specifier = ">=1.1,<2" },
     { name = "pytest", specifier = ">=8,<10" },
     { name = "pytest-asyncio", specifier = ">=0.24,<2" },
     { name = "ruff", specifier = ">=0.8,<1" },
@@ -1230,6 +1232,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c6/09/ccb6867c2d6c6de98d1d285d8a3a2103fdf452c2fef5019bb3d8ac9938d9/multiformats-config-0.3.1.tar.gz", hash = "sha256:7eaa80ef5d9c5ee9b86612d21f93a087c4a655cbcb68960457e61adbc62b47a7", size = 28345 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/9b/c21a9c1d5ea4847989f1eb00e3147e38e79aaea7c4b4d1cbd4f1afae9740/multiformats_config-0.3.1-py3-none-any.whl", hash = "sha256:dec4c9d42ed0d9305889b67440f72e8e8d74b82b80abd7219667764b5b0a8e1d", size = 17153 },
+]
+
+[[package]]
+name = "nodeenv"
+version = "1.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/bf/d1bda4f6168e0b2e9e5958945e01910052158313224ada5ce1fb2e1113b8/nodeenv-1.10.0.tar.gz", hash = "sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb", size = 55611 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl", hash = "sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827", size = 23438 },
 ]
 
 [[package]]
@@ -1611,6 +1622,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/32/64/53a5c75b11fa697d74ae5c52b38ee6c98fa3bf3bfd50e064ae11ef1a0db3/pymultihash-0.8.2.tar.gz", hash = "sha256:49c75a1ae9ecc6d22d259064d4597b3685da3f0258f4ded632e03a3a79af215b", size = 17471 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/1c/570697fafd87adcec479b9ad34dc8371a363aa14bd9edaece5f0b8066903/pymultihash-0.8.2-py3-none-any.whl", hash = "sha256:f7fa840b24bd6acbd6b073fcd330f10e15619387297babf1dd13ca4dae6e8209", size = 13505 },
+]
+
+[[package]]
+name = "pyright"
+version = "1.1.410"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nodeenv" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/10/53/e4d8ea1391bd4355231be6f91bf239479aa0014260ed3fb5526eeb12a1f2/pyright-1.1.410.tar.gz", hash = "sha256:07a073b8ba6749826773c1269773efa11b93440d9a6aa60419d9a3172d6dc488", size = 4062013 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/33/288b5868fa00846dacf249633719d747893e54aebd196b9968ac1878a5d3/pyright-1.1.410-py3-none-any.whl", hash = "sha256:5e961bed37cacf96b3f7cd7b1da39b350a9239aa2e69138d0e88f728cfaf296c", size = 6082448 },
 ]
 
 [[package]]

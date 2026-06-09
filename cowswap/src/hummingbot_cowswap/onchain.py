@@ -15,9 +15,11 @@ class EvmReader(Protocol):
 
     def balance_of(self, token: CoWToken, owner: str) -> str:
         """Return ERC-20 balance in atomic units."""
+        ...
 
     def allowance(self, token: CoWToken, owner: str, spender: str) -> str:
         """Return ERC-20 allowance in atomic units."""
+        ...
 
 
 class FakeEvmReader:
