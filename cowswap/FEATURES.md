@@ -16,7 +16,7 @@
 - [ ] Reuse Hummingbot connector patterns for config maps, trading rules, order trackers, polling, events, and tests.
 - [x] Keep configuration deterministic and environment-driven for Docker Compose packaging.
 - [ ] Add unit, mocked Order Book API, lifecycle/restart, compatibility, and integration tests before considering a feature complete.
-- [ ] Document every supported chain, token scope, order type, limitation, and operational assumption.
+- [x] Document every supported chain, token scope, order type, limitation, and operational assumption.
 - [ ] Follow the Hummingbot connector test pattern: use shared-style mocked lifecycle tests for deterministic create/cancel/status/trade behavior, and keep live exchange/API tests separate and opt-in.
 - [x] Treat live CoW API tests with dummy wallets as smoke tests for quote, signing, posting, and classified API rejection; do not treat them as settlement/fill proof unless the account is funded and allowance is configured.
 - [x] Keep `cowdao-cowpy` behind a narrow adapter because version `1.0.1` has package import side effects; import only required submodules and avoid executing package-level app-data network calls during Hummingbot startup.
@@ -27,7 +27,7 @@
 - [ ] Define connector boundary as a Python spot-style Hummingbot connector installed in the Hummingbot API/runtime layer, not imported directly by Marlin.
 - [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
 - [x] Define MVP chain as Base mainnet only.
-- [ ] Define MVP token scope as ERC-20/WETH only.
+- [x] Define MVP token scope as ERC-20/WETH only.
 - [x] Decide whether `cowdao-cowpy` is acceptable as a dependency for the MVP adapter, with caveats documented.
 - [ ] Review `cowdao-cowpy` license compatibility.
 - [ ] Review `cowdao-cowpy` package provenance, maintained versions, pinned version ranges, transitive dependencies, vulnerability scan results, and fallback plan if it is unsuitable.
@@ -58,19 +58,19 @@
 - [x] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
 - [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
 - [x] Add opt-in staging smoke test with generated dummy EOA that verifies quote/sign/post reaches CoW API and receives a classified no-funds rejection.
-- [ ] Document supported chains, order types, and limitations.
+- [x] Document supported chains, order types, and limitations.
 
 ## Marlin Runtime Integration
 
 - [ ] Package CoW Swap into a custom Hummingbot API/runtime image, not into the Marlin Python image.
-- [ ] Keep Marlin integration API-only: Marlin calls Hummingbot API connector endpoints by connector name.
+- [x] Keep Marlin integration API-only: Marlin calls Hummingbot API connector endpoints by connector name.
 - [ ] Ensure the connector appears in Hummingbot API `/connectors/`.
 - [ ] Ensure Hummingbot API exposes connector metadata through `/connectors/{connector}/order-types`, `/connectors/{connector}/trading-rules`, and `/connectors/{connector}/config-map`.
 - [ ] Support Compose configuration through `HUMMINGBOT_CONNECTOR`, `SYMBOL`, Hummingbot account settings, and connector-specific credential environment variables.
-- [ ] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway` if approvals/RPC are delegated there, `hummingbot-postgres`, and `hummingbot-broker`.
+- [x] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway` if approvals/RPC are delegated there, `hummingbot-postgres`, and `hummingbot-broker`.
 - [ ] Add a Marlin readiness path that verifies connector availability, supported order types, trading rules, account connector state, and order book or equivalent market data availability.
-- [ ] Document how CoW asynchronous order evidence maps back to Marlin artifacts, ledgers, active orders, order search, and trades.
-- [ ] Document that CoW code is owned by the Hummingbot connector image; Marlin should only consume normalized API responses and persisted evidence.
+- [x] Document how CoW asynchronous order evidence maps back to Marlin artifacts, ledgers, active orders, order search, and trades.
+- [x] Document that CoW code is owned by the Hummingbot connector image; Marlin should only consume normalized API responses and persisted evidence.
 
 ## Order Lifecycle
 
@@ -91,7 +91,7 @@
 - [x] Support `SELL` orders.
 - [ ] Evaluate whether `BUY` orders are required.
 - [ ] Support swap-style `SELL` orders from quotes, with slippage translated into limit price/minimum receive and success emitted only after settlement/fill reconciliation.
-- [ ] Defer generic limit-order support until Hummingbot order-type mapping is specified.
+- [x] Defer generic limit-order support until Hummingbot order-type mapping is specified.
 - [x] Support custom validity/expiration.
 - [x] Support receiver address configuration.
 - [x] Support app data or app code attribution.
