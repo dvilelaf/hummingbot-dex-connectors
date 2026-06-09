@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 from hummingbot_cowswap.errors import (
     CoWOrderBookAPIError,
     CoWOrderBookMalformedResponseError,
+    CoWOrderBookRateLimitError,
     CoWOrderBookTransientError,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
+    from collections.abc import Awaitable, Callable
 
     from hummingbot_cowswap.models import CoWConfig
 
 T = TypeVar("T")
+DEFAULT_TIMEOUT_SECONDS = 10.0
+DEFAULT_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 0.25
+HTTP_TOO_MANY_REQUESTS = 429
+HTTP_SERVER_ERROR_MIN = 500
+HTTP_SERVER_ERROR_MAX = 600
 
 
 class CoWClient(Protocol):
@@ -46,14 +54,28 @@ class CoWClient(Protocol):
         """Request cancellation for a previously posted UID."""
         ...
 
+    async def check_health(self) -> bool:
+        """Return whether the CoW Order Book API is reachable."""
+        ...
+
 
 class CowDaoOrderBookClient:
     """CoW Order Book API client backed by cowdao-cowpy."""
 
-    def __init__(self, config: CoWConfig) -> None:
+    def __init__(
+        self,
+        config: CoWConfig,
+        *,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
+    ) -> None:
         """Create a cowdao-cowpy API wrapper for one chain/environment."""
         self.config = config
         self._api: object | None = None
+        self._timeout_seconds = timeout_seconds
+        self._max_attempts = max(1, max_attempts)
+        self._retry_delay_seconds = max(0.0, retry_delay_seconds)
 
     async def quote_sell(self, request: dict[str, object]) -> object:
         """Build and submit a cowdao-cowpy sell quote request."""
@@ -72,7 +94,7 @@ class CowDaoOrderBookClient:
 
         return await _call_order_book(
             "quote_sell",
-            self._order_book_api().post_quote(
+            lambda: self._order_book_api().post_quote(
                 OrderQuoteRequest(
                     sellToken=str(request["sell_token"]),
                     buyToken=str(request["buy_token"]),
@@ -90,6 +112,9 @@ class CowDaoOrderBookClient:
                 ),
                 OrderQuoteValidity1(validTo=request["valid_to"]),
             ),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
         )
 
     async def quote_buy(self, request: dict[str, object]) -> object:
@@ -109,7 +134,7 @@ class CowDaoOrderBookClient:
 
         return await _call_order_book(
             "quote_buy",
-            self._order_book_api().post_quote(
+            lambda: self._order_book_api().post_quote(
                 OrderQuoteRequest(
                     sellToken=str(request["sell_token"]),
                     buyToken=str(request["buy_token"]),
@@ -127,6 +152,9 @@ class CowDaoOrderBookClient:
                 ),
                 OrderQuoteValidity1(validTo=request["valid_to"]),
             ),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
         )
 
     async def post_sell_order(self, order: dict[str, object]) -> str:
@@ -166,7 +194,10 @@ class CowDaoOrderBookClient:
         )
         uid = await _call_order_book(
             "post_sell_order",
-            self._order_book_api().post_order(order_creation),
+            lambda: self._order_book_api().post_order(order_creation),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
         )
         try:
             return str(uid.root)
@@ -183,7 +214,10 @@ class CowDaoOrderBookClient:
 
         return await _call_order_book(
             "get_order_status",
-            self._order_book_api().get_order_by_uid(UID(order_uid)),
+            lambda: self._order_book_api().get_order_by_uid(UID(order_uid)),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
         )
 
     async def get_trades(self, order_uid: str) -> list[object]:
@@ -193,13 +227,27 @@ class CowDaoOrderBookClient:
 
         return await _call_order_book(
             "get_trades",
-            self._order_book_api().get_trades_by_order_uid(UID(order_uid)),
+            lambda: self._order_book_api().get_trades_by_order_uid(UID(order_uid)),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
         )
 
     async def cancel_order(self, order_uid: str) -> None:
         """Reject cancellation until signed cancellation is wired in."""
         message = "CoW cancellation requires Hummingbot-managed signed cancellation"
         raise NotImplementedError(message)
+
+    async def check_health(self) -> bool:
+        """Return whether the cowdao-cowpy Order Book API responds."""
+        await _call_order_book(
+            "check_health",
+            lambda: self._order_book_api().get_version(),
+            timeout_seconds=self._timeout_seconds,
+            max_attempts=self._max_attempts,
+            retry_delay_seconds=self._retry_delay_seconds,
+        )
+        return True
 
     def _order_book_api(self) -> object:
         """Return the lazily initialized cowdao-cowpy OrderBookApi instance."""
@@ -218,7 +266,14 @@ class CowDaoOrderBookClient:
         return self._api
 
 
-async def _call_order_book(operation: str, request: Awaitable[T]) -> T:
+async def _call_order_book(
+    operation: str,
+    request_factory: Callable[[], Awaitable[T]],
+    *,
+    timeout_seconds: float,
+    max_attempts: int,
+    retry_delay_seconds: float,
+) -> T:
     """Convert cowpy API failures into connector-controlled exceptions."""
     ensure_cowpy_submodule_imports()
     from cowdao_cowpy.common.api.errors import (
@@ -228,29 +283,97 @@ async def _call_order_book(operation: str, request: Awaitable[T]) -> T:
         UnexpectedResponseError,
     )
 
-    try:
-        return await request
-    except (TimeoutError, NetworkError) as exc:
+    max_attempts = max(1, max_attempts)
+    for attempt in range(1, max_attempts + 1):
+        cause: Exception
+        try:
+            return await asyncio.wait_for(request_factory(), timeout=timeout_seconds)
+        except (
+            TimeoutError,
+            NetworkError,
+            UnexpectedResponseError,
+            SerializationError,
+            ApiResponseError,
+        ) as exc:
+            cause = exc
+            error = _map_order_book_error(operation, exc)
+
+        if attempt >= max_attempts:
+            raise error from cause
+        if retry_delay_seconds:
+            await asyncio.sleep(retry_delay_seconds)
+
+    message = f"transient CoW Order Book API failure during {operation}: exhausted retries"
+    raise CoWOrderBookTransientError(message)
+
+
+def _map_order_book_error(operation: str, exc: Exception) -> CoWOrderBookAPIError:
+    """Map a cowpy or asyncio failure into the connector error hierarchy."""
+    ensure_cowpy_submodule_imports()
+    from cowdao_cowpy.common.api.errors import (
+        ApiResponseError,
+        NetworkError,
+        SerializationError,
+        UnexpectedResponseError,
+    )
+
+    if isinstance(exc, TimeoutError | NetworkError):
         message = f"transient CoW Order Book API failure during {operation}: {exc}"
-        raise CoWOrderBookTransientError(message) from exc
-    except UnexpectedResponseError as exc:
+        return CoWOrderBookTransientError(message)
+    if isinstance(exc, UnexpectedResponseError):
         if _looks_like_timeout(exc):
             message = f"transient CoW Order Book API failure during {operation}: {exc}"
-            raise CoWOrderBookTransientError(message) from exc
+            return CoWOrderBookTransientError(message)
         message = f"malformed CoW Order Book API response during {operation}: {exc}"
         raise CoWOrderBookMalformedResponseError(message) from exc
-    except SerializationError as exc:
+    if isinstance(exc, SerializationError):
         message = f"malformed CoW Order Book API response during {operation}: {exc}"
         raise CoWOrderBookMalformedResponseError(message) from exc
-    except ApiResponseError as exc:
+    if isinstance(exc, ApiResponseError):
+        if _is_rate_limit(exc):
+            message = f"rate-limited by CoW Order Book API during {operation}: {exc}"
+            return CoWOrderBookRateLimitError(message)
+        if _is_server_error(exc):
+            message = f"transient CoW Order Book API failure during {operation}: {exc}"
+            return CoWOrderBookTransientError(message)
         message = f"CoW Order Book API rejected {operation}: {exc}"
         raise CoWOrderBookAPIError(message) from exc
+    message = f"CoW Order Book API rejected {operation}: {exc}"
+    raise CoWOrderBookAPIError(message) from exc
 
 
 def _looks_like_timeout(exc: Exception) -> bool:
     """Return whether cowpy wrapped a timeout as an unexpected response."""
     message = str(exc).lower()
     return "timeout" in message or "timed out" in message
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    """Return whether cowpy exposed an Order Book API rate limit."""
+    message = str(exc).lower()
+    return (
+        _api_status(exc) == HTTP_TOO_MANY_REQUESTS
+        or "rate limit" in message
+        or "too many" in message
+    )
+
+
+def _is_server_error(exc: Exception) -> bool:
+    """Return whether cowpy exposed a retryable server-side API failure."""
+    status = _api_status(exc)
+    return status is not None and HTTP_SERVER_ERROR_MIN <= status < HTTP_SERVER_ERROR_MAX
+
+
+def _api_status(exc: Exception) -> int | None:
+    """Extract an HTTP status code from cowpy's ApiResponseError shapes."""
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    if status is None and isinstance(response, dict):
+        status = response.get("status") or response.get("status_code")
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
 
 
 def _order_kind(order_kind_enum: object, kind: str) -> object:

@@ -39,5 +39,9 @@ class CoWOrderBookTransientError(CoWOrderBookAPIError):
     """Raised when the CoW Order Book API call fails transiently."""
 
 
+class CoWOrderBookRateLimitError(CoWOrderBookTransientError):
+    """Raised when the CoW Order Book API rate-limits a request."""
+
+
 class CoWOrderBookMalformedResponseError(CoWOrderBookAPIError):
     """Raised when cowpy returns an unexpected Order Book API response shape."""

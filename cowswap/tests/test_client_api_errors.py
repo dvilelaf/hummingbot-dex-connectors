@@ -12,6 +12,7 @@ from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 from hummingbot_cowswap.errors import (
     CoWOrderBookAPIError,
     CoWOrderBookMalformedResponseError,
+    CoWOrderBookRateLimitError,
     CoWOrderBookTransientError,
 )
 from hummingbot_cowswap.models import CoWConfig
@@ -99,6 +100,40 @@ class MalformedUidApi:
         return SimpleNamespace(uid="0xabc")
 
 
+class FlakyQuoteApi:
+    """Fake cowpy API that succeeds after a transient quote failure."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def post_quote(self, *_args: object) -> object:
+        """Fail transiently once, then return a quote payload."""
+        self.calls += 1
+        if self.calls == 1:
+            ensure_cowpy_submodule_imports()
+            from cowdao_cowpy.common.api.errors import NetworkError
+
+            message = "connection reset"
+            raise NetworkError(message)
+        return SimpleNamespace(quote=SimpleNamespace(validTo=1_900_000_000))
+
+
+class RateLimitedQuoteApi:
+    """Fake cowpy API that returns a rate-limit rejection."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def post_quote(self, *_args: object) -> NoReturn:
+        """Raise cowpy's API response error with a 429 shape."""
+        self.calls += 1
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.common.api.errors import ApiResponseError
+
+        message = "rate limit exceeded"
+        raise ApiResponseError(message, "TooManyRequests", {"status": 429})
+
+
 @pytest.mark.asyncio
 async def test_quote_sell_wraps_timeout_as_transient_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Quote timeouts surface as connector-controlled transient errors."""
@@ -145,3 +180,29 @@ async def test_post_sell_order_rejects_malformed_uid(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(CoWOrderBookMalformedResponseError, match="post_sell_order"):
         await client.post_sell_order(signed_order())
+
+
+@pytest.mark.asyncio
+async def test_quote_sell_retries_transient_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Transient Order Book API failures are retried before surfacing."""
+    api = FlakyQuoteApi()
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+    monkeypatch.setattr(client, "_api", api)
+
+    quote = await client.quote_sell(quote_request())
+
+    assert quote.quote.validTo == 1_900_000_000
+    assert api.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_quote_sell_wraps_rate_limit_after_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rate limits surface as a specific transient connector error."""
+    api = RateLimitedQuoteApi()
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+    monkeypatch.setattr(client, "_api", api)
+
+    with pytest.raises(CoWOrderBookRateLimitError, match="quote_sell"):
+        await client.quote_sell(quote_request())
+
+    assert api.calls == 3
