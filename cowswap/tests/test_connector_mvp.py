@@ -280,9 +280,31 @@ async def test_poll_order_maps_partial_expired_and_failed_states(tmp_path: Path)
     assert failed.state is OrderState.FAILED
 
 
+@pytest.mark.parametrize(
+    ("raw_status", "executed_sell", "executed_buy", "trades", "expected_state", "expected_tx"),
+    [
+        (
+            "fulfilled",
+            "1000000",
+            "500000000000000000",
+            [SimpleNamespace(txHash="0xrestart")],
+            OrderState.FILLED,
+            "0xrestart",
+        ),
+        ("expired", "0", "0", [], OrderState.EXPIRED, None),
+        ("cancelled", "0", "0", [], OrderState.CANCELLED, None),
+        ("unknown-api-status", "0", "0", [], OrderState.FAILED, None),
+    ],
+)
 @pytest.mark.asyncio
-async def test_new_connector_instance_reconciles_persisted_order_after_restart(
+async def test_new_connector_instance_reconciles_persisted_order_states_after_restart(
     tmp_path: Path,
+    raw_status: str,
+    executed_sell: str,
+    executed_buy: str,
+    trades: list[object],
+    expected_state: OrderState,
+    expected_tx: str | None,
 ) -> None:
     client = FakeCoWClient()
     store_path = tmp_path / "orders.json"
@@ -309,11 +331,11 @@ async def test_new_connector_instance_reconciles_persisted_order_after_restart(
     )
 
     client.status = cow_order(
-        status="fulfilled",
-        executed_sell="1000000",
-        executed_buy="500000000000000000",
+        status=raw_status,
+        executed_sell=executed_sell,
+        executed_buy=executed_buy,
     )
-    client.trades = [cow_trade(tx_hash="0xrestart")]
+    client.trades = trades
     restarted = CoWConnector(
         config=first.config,
         client=client,
@@ -321,9 +343,14 @@ async def test_new_connector_instance_reconciles_persisted_order_after_restart(
     )
 
     reconciled = await restarted.poll_order("cid-restart")
+    recovered = JsonOrderStore(store_path).load("cid-restart")
 
-    assert reconciled.state is OrderState.FILLED
-    assert reconciled.settlement_tx_hash == "0xrestart"
+    assert reconciled.state is expected_state
+    assert reconciled.raw_status == raw_status
+    assert reconciled.executed_sell == executed_sell
+    assert reconciled.executed_buy == executed_buy
+    assert reconciled.settlement_tx_hash == expected_tx
+    assert recovered == reconciled
 
 
 def test_json_order_store_round_trips_tracked_order(tmp_path: Path) -> None:
