@@ -3,7 +3,7 @@
 ## MVP: Swap-Only Gateway Connector
 
 - [ ] Define MVP scope as Base mainnet swap support for Aerodrome basic stable/volatile pools only.
-- [ ] Use Gateway Router schema for swap endpoints; reserve AMM schema for basic-pool liquidity and CLMM schema for Slipstream positions.
+- [ ] Use Hummingbot Gateway Router schema for swap endpoints; reserve AMM schema for basic-pool liquidity and CLMM schema for Slipstream positions.
 - [ ] Add Gateway connector scaffold for `aerodrome`.
 - [ ] Add Aerodrome chain/network configuration for Base.
 - [ ] Add contract address configuration for global contracts: Router, PoolFactory, and FactoryRegistry.
@@ -28,6 +28,16 @@
 - [ ] Add fork/integration tests for at least one liquid Base pair.
 - [ ] Add compatibility tests against Hummingbot Gateway Router schema for quote, execute, approval, error, and config payloads.
 - [ ] Document supported chains, pool types, and known limitations.
+
+## Marlin Runtime Integration
+
+- [ ] Package Aerodrome into a custom `hummingbot-gateway` image, not into the Marlin Python image.
+- [ ] Keep Marlin integration API-only: Marlin calls Hummingbot API, and Hummingbot API calls Gateway.
+- [ ] Ensure the connector is available to Marlin through Hummingbot API Gateway endpoints, starting with `/gateway/swap/quote`.
+- [ ] Support Compose configuration through `HUMMINGBOT_GATEWAY_IMAGE`, `HUMMINGBOT_GATEWAY_CONNECTOR=aerodrome`, `HUMMINGBOT_GATEWAY_NETWORK`, and `SYMBOL`.
+- [ ] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway`, `hummingbot-postgres`, and `hummingbot-broker`.
+- [ ] Add a Marlin smoke path that verifies Gateway status, connector quote availability, and no direct Marlin import of Aerodrome code.
+- [ ] Document that Aerodrome execution remains Gateway-owned; Marlin should consume normalized quote/execution evidence through Hummingbot API.
 
 ## Slipstream Swap Support
 

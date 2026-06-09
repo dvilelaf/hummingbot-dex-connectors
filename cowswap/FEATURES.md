@@ -2,7 +2,8 @@
 
 ## MVP: Python Hummingbot Connector
 
-- [ ] Define connector boundary as a Python spot-style Hummingbot connector for CoW Order Book API plus an explicit Hummingbot-managed EVM signer/RPC approval path.
+- [ ] Define connector boundary as a Python spot-style Hummingbot connector installed in the Hummingbot API/runtime layer, not imported directly by Marlin.
+- [ ] Use the CoW connector for CoW Order Book API lifecycle plus an explicit Hummingbot-managed EVM signer/RPC approval path.
 - [ ] Define MVP chain as Base mainnet only.
 - [ ] Define MVP token scope as ERC-20/WETH only.
 - [ ] Decide whether `cowdao-cowpy` is acceptable as a dependency.
@@ -35,6 +36,18 @@
 - [ ] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
 - [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
 - [ ] Document supported chains, order types, and limitations.
+
+## Marlin Runtime Integration
+
+- [ ] Package CoW Swap into a custom Hummingbot API/runtime image, not into the Marlin Python image.
+- [ ] Keep Marlin integration API-only: Marlin calls Hummingbot API connector endpoints by connector name.
+- [ ] Ensure the connector appears in Hummingbot API `/connectors/`.
+- [ ] Ensure Hummingbot API exposes connector metadata through `/connectors/{connector}/order-types`, `/connectors/{connector}/trading-rules`, and `/connectors/{connector}/config-map`.
+- [ ] Support Compose configuration through `HUMMINGBOT_CONNECTOR`, `SYMBOL`, Hummingbot account settings, and connector-specific credential environment variables.
+- [ ] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway` if approvals/RPC are delegated there, `hummingbot-postgres`, and `hummingbot-broker`.
+- [ ] Add a Marlin readiness path that verifies connector availability, supported order types, trading rules, account connector state, and order book or equivalent market data availability.
+- [ ] Document how CoW asynchronous order evidence maps back to Marlin artifacts, ledgers, active orders, order search, and trades.
+- [ ] Document that CoW code is owned by the Hummingbot connector image; Marlin should only consume normalized API responses and persisted evidence.
 
 ## Order Lifecycle
 
