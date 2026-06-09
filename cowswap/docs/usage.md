@@ -67,10 +67,12 @@ curl -fsS $AUTH -X POST "$HB_API/trading/orders" \
   }' | jq '.'
 ```
 
+Use `"trade_type": "BUY"` with the same shape for a market-style buy intent.
+
 Live limitations:
 
 - Base mainnet only, chain ID `8453`.
-- Sell-only ERC-20/WETH; no BUY, native ETH, or generic limit orders.
+- Buy/sell ERC-20/WETH only; no native ETH or generic limit orders.
 - Submitted signed intents are not fills; final ledgers need terminal
   order/trade/settlement evidence.
 - Cancellation needs Hummingbot-managed signed cancellation and is not wired

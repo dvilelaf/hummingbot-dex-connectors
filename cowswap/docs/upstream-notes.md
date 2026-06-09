@@ -16,7 +16,7 @@ What is missing for a real Hummingbot PR:
 Do not sell yet:
 
 - No claim of production readiness, settlement proof, or autonomous execution.
-- No claim of generic limit orders, BUY, native ETH, multi-chain support, or
+- No claim of generic limit orders, native ETH, multi-chain support, or
   complete cancellation.
 - No claim that staging smoke tests prove fills; they only prove API
   reachability and classified rejection with a dummy wallet.
@@ -35,7 +35,7 @@ Tests needed before upstreaming:
 - Lifecycle tests for quote, sign, post, status, trades, cancellation, expiry,
   reject, partial fill, and fill mapping.
 - Integration smoke against CoW staging with redacted evidence artifacts.
-- Readiness tests proving unsupported chains, BUY/native ETH/limit orders, bad
+- Readiness tests proving unsupported chains, native ETH, limit orders, bad
   token metadata, missing allowance, and missing signer fail closed.
 - Runtime image smoke proving connector discovery from the Hummingbot API
   container, not only local package imports.

@@ -108,7 +108,7 @@ curl -fsS $AUTH \
 the trading-rules response must include the exact `SYMBOL`. If Basic Auth is
 disabled, omit `AUTH` from the `curl` commands.
 
-Minimal SELL market-style order payload shape for Hummingbot API:
+Minimal market-style order payload shape for Hummingbot API:
 
 ```bash
 curl -fsS $AUTH -X POST "$HB_API/trading/orders" \
@@ -124,6 +124,7 @@ curl -fsS $AUTH -X POST "$HB_API/trading/orders" \
   }' | jq '.'
 ```
 
+Use `"trade_type": "BUY"` with the same shape for the minimal buy path.
 Use staging or a deliberately low funded test account for smoke submissions.
 The response is acceptable only if it returns a Hummingbot client order ID and
 the connector records the CoW order UID or a classified rejection as evidence.
@@ -133,10 +134,9 @@ the connector records the CoW order UID or a classified rejection as evidence.
 For the MVP, Hummingbot API should report:
 
 - connector: `cowswap`
-- supported order types: `MARKET` for swap-style sell orders only, unless the
+- supported order types: `MARKET` for swap-style buy/sell orders only, unless the
   Hummingbot connector implementation maps CoW intents to a stricter type.
-- supported trade type: `SELL`
-- unsupported trade type: `BUY`
+- supported trade types: `BUY`, `SELL`
 - supported chain: Base mainnet, chain ID `8453`
 - token scope: configured ERC-20 tokens and WETH on Base.
 
@@ -152,7 +152,7 @@ Marlin readiness for `cowswap` is blocked unless all checks pass:
 - `GET /connectors/cowswap/config-map` exposes required account fields without
   raw private-key fields in Marlin-owned config.
 - `GET /connectors/cowswap/order-types` includes the order type Marlin will
-  submit; MVP expectation is `MARKET` plus `SELL`.
+  submit; MVP expectation is `MARKET` plus `BUY`/`SELL`.
 - `GET /connectors/cowswap/trading-rules?trading_pairs=$SYMBOL` returns a rule
   for the exact symbol with usable minimum size and amount increment data.
 - The configured Hummingbot account has the `cowswap` connector loaded.
@@ -193,7 +193,7 @@ Ledger rules:
 ## MVP Limitations
 
 - Base mainnet only.
-- Sell orders only.
+- Buy and sell orders only.
 - ERC-20/WETH only; native ETH flow is a separate feature.
 - No generic limit-order support until the Hummingbot order-type mapping is
   specified.
