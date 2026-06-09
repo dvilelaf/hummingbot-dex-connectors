@@ -7,13 +7,29 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
 
-from hummingbot_cowswap.models import CoWToken, SellOrderRequest
+from hummingbot_cowswap.models import CoWToken, OrderState, SellOrderRequest
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 CONNECTOR_NAME = "cowswap"
 SUPPORTED_ORDER_TYPES = ("MARKET",)
+CONFIG_MAP = {
+    "connector": CONNECTOR_NAME,
+    "connector_name": CONNECTOR_NAME,
+    "supported_order_types": SUPPORTED_ORDER_TYPES,
+    "requires_all_connector_settings": False,
+    "uses_raw_private_key": False,
+}
+HUMMINGBOT_ORDER_STATES = {
+    OrderState.SUBMITTED: "PENDING_CREATE",
+    OrderState.OPEN: "OPEN",
+    OrderState.PARTIALLY_FILLED: "PARTIALLY_FILLED",
+    OrderState.FILLED: "FILLED",
+    OrderState.CANCELLED: "CANCELED",
+    OrderState.EXPIRED: "FAILED",
+    OrderState.FAILED: "FAILED",
+}
 
 
 class SellOrderConnector(Protocol):
@@ -51,7 +67,10 @@ class HummingbotCoWAdapter:
     ) -> None:
         """Create an adapter over an existing CoW connector and configured pairs."""
         self._connector = connector
-        self._tokens_by_pair = dict(tokens_by_pair)
+        self._tokens_by_pair = {
+            self.convert_from_exchange_trading_pair(pair): tokens
+            for pair, tokens in tokens_by_pair.items()
+        }
         self._in_flight_orders: dict[str, object] = {}
         self._trading_rules = {
             pair: HummingbotTradingRule(
@@ -63,9 +82,19 @@ class HummingbotCoWAdapter:
         }
 
     @staticmethod
+    def config_map() -> dict[str, object]:
+        """Return compact adapter metadata without registering global Hummingbot settings."""
+        return dict(CONFIG_MAP)
+
+    @staticmethod
     def supported_order_types() -> tuple[str, ...]:
         """Return the conservative order types this shim is willing to advertise."""
         return SUPPORTED_ORDER_TYPES
+
+    @property
+    def order_types(self) -> tuple[str, ...]:
+        """Alias used by some Hummingbot probes."""
+        return self.supported_order_types()
 
     @property
     def trading_rules(self) -> dict[str, HummingbotTradingRule]:
@@ -76,6 +105,24 @@ class HummingbotCoWAdapter:
     def in_flight_orders(self) -> dict[str, object]:
         """Return orders submitted through this adapter instance."""
         return dict(self._in_flight_orders)
+
+    @property
+    def order_statuses(self) -> dict[str, str]:
+        """Return Hummingbot-style order state names for tracked orders."""
+        return {
+            client_order_id: _hummingbot_order_state(order)
+            for client_order_id, order in self._in_flight_orders.items()
+        }
+
+    @staticmethod
+    def convert_from_exchange_trading_pair(trading_pair: str) -> str:
+        """Normalize exchange/API trading pairs into Hummingbot BASE-QUOTE form."""
+        return _normalize_trading_pair(trading_pair)
+
+    @staticmethod
+    def convert_to_exchange_trading_pair(trading_pair: str) -> str:
+        """Normalize Hummingbot trading pairs for this CoW shim."""
+        return _normalize_trading_pair(trading_pair)
 
     async def sell(
         self,
@@ -95,10 +142,11 @@ class HummingbotCoWAdapter:
         if price is not None:
             message = "CoW shim only supports quoted market-style SELL submissions"
             raise ValueError(message)
+        normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
         sell_token, buy_token = self._tokens_for_pair(trading_pair)
         request = SellOrderRequest(
-            client_order_id=client_order_id or _new_client_order_id(trading_pair),
-            trading_pair=trading_pair,
+            client_order_id=client_order_id or _new_client_order_id(normalized_pair),
+            trading_pair=normalized_pair,
             sell_token=sell_token,
             buy_token=buy_token,
             amount=str(amount),
@@ -119,8 +167,9 @@ class HummingbotCoWAdapter:
         return tracked
 
     def _tokens_for_pair(self, trading_pair: str) -> tuple[CoWToken, CoWToken]:
+        normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
         try:
-            return self._tokens_by_pair[trading_pair]
+            return self._tokens_by_pair[normalized_pair]
         except KeyError as exc:
             message = f"unsupported trading_pair for CoW shim: {trading_pair}"
             raise ValueError(message) from exc
@@ -137,6 +186,19 @@ def _order_type_name(order_type: object) -> str:
 
 def _new_client_order_id(trading_pair: str) -> str:
     return f"{CONNECTOR_NAME}-{trading_pair}-{uuid4().hex[:16]}"
+
+
+def _normalize_trading_pair(trading_pair: str) -> str:
+    return trading_pair.replace("/", "-").replace("_", "-").upper()
+
+
+def _hummingbot_order_state(order: object) -> str:
+    state = getattr(order, "state", None)
+    if isinstance(state, OrderState):
+        return HUMMINGBOT_ORDER_STATES[state]
+    if state is not None:
+        return str(state).upper()
+    return "UNKNOWN"
 
 
 def _reject_private_key_material(kwargs: Mapping[str, object]) -> None:
