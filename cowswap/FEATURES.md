@@ -2,30 +2,38 @@
 
 ## MVP: Python Hummingbot Connector
 
-- [ ] Confirm connector target: Hummingbot Python core connector, not Gateway.
+- [ ] Define connector boundary as a Python spot-style Hummingbot connector for CoW Order Book API plus an explicit Hummingbot-managed EVM signer/RPC approval path.
+- [ ] Define MVP chain as Base mainnet only.
+- [ ] Define MVP token scope as ERC-20/WETH only.
 - [ ] Decide whether `cowdao-cowpy` is acceptable as a dependency.
 - [ ] Review `cowdao-cowpy` license compatibility.
+- [ ] Review `cowdao-cowpy` package provenance, maintained versions, pinned version ranges, transitive dependencies, vulnerability scan results, and fallback plan if it is unsuitable.
 - [ ] Add Python package structure for the CoW Swap connector.
 - [ ] Add connector configuration for supported chain IDs.
 - [ ] Add API environment configuration for production and staging.
-- [ ] Add wallet/private-key or signer integration compatible with Hummingbot.
+- [ ] Add Hummingbot-managed signer integration; do not store, log, or pass raw private keys through connector configuration.
+- [ ] Add per-chain configuration for Order Book API, settlement/verifying contract, and `GPv2VaultRelayer`.
 - [ ] Implement token metadata lookup and amount normalization.
 - [ ] Implement balance checks.
-- [ ] Implement ERC-20 allowance checks.
-- [ ] Implement approval transaction flow.
+- [ ] Implement ERC-20 allowance checks against the per-chain `GPv2VaultRelayer`.
+- [ ] Implement approval transaction flow to the verified `GPv2VaultRelayer` with exact or configurable capped allowances.
+- [ ] Implement allowance reset/revoke behavior where token behavior requires it.
+- [ ] Surface insufficient allowance separately from quote, signing, and settlement failures.
 - [ ] Implement quote request creation for sell orders.
 - [ ] Implement quote response parsing.
-- [ ] Implement EIP-712 order signing.
+- [ ] Implement EIP-712 order signing with per-chain domain validation, `chainId`, verifying contract, validity bounds, and replay-protection checks.
+- [ ] Verify order UID, digest, quote ID, `validTo`, and signed order fields before posting.
 - [ ] Implement order posting.
 - [ ] Store and track CoW order UID.
-- [ ] Map CoW order states to Hummingbot order states.
+- [ ] Map CoW order states to Hummingbot order states across quote, signed intent, posted order, accepted/open, solver settlement transaction, fills, expiration, cancellation, and rejection.
 - [ ] Poll order status by UID.
 - [ ] Poll trades/fills by order UID.
-- [ ] Implement basic cancellation.
+- [ ] Implement cancellation modes: off-chain signed cancellation, on-chain invalidation if needed, race handling with settlement, and post-cancel reconciliation.
 - [ ] Handle expired orders.
 - [ ] Handle rejected quotes and rejected orders.
 - [ ] Add unit tests for quote mapping, order mapping, and amount conversion.
-- [ ] Add integration test against a testnet or mock Order Book API.
+- [ ] Add mocked Order Book API tests for quote, post, status, trades, and cancellation.
+- [ ] Add staging/testnet integration tests for the full quote, sign, post, poll, fill or cancel path.
 - [ ] Document supported chains, order types, and limitations.
 
 ## Order Lifecycle
@@ -38,32 +46,34 @@
 - [ ] Support expired state.
 - [ ] Support failed/rejected state.
 - [ ] Reconcile locally tracked orders after process restart.
-- [ ] Persist enough order metadata to recover tracking.
+- [ ] Persist order UID, `validTo`, digest, quote ID, sell token, buy token, sell amount, buy amount, executed amounts, order kind, partially-fillable flag, signing scheme, owner, receiver, chain ID, Hummingbot client order ID, and trading pair to recover tracking.
 - [ ] Emit Hummingbot order events consistently.
+- [ ] Add restart/reconciliation tests for persisted orders, expired orders, filled orders, canceled orders, and unknown API responses.
 
 ## Trading Features
 
 - [ ] Support `SELL` orders.
 - [ ] Evaluate whether `BUY` orders are required.
-- [ ] Support market-like swaps with configurable slippage.
-- [ ] Support limit orders if useful for strategies.
+- [ ] Support swap-style `SELL` orders from quotes, with slippage translated into limit price/minimum receive and success emitted only after settlement/fill reconciliation.
+- [ ] Defer generic limit-order support until Hummingbot order-type mapping is specified.
 - [ ] Support custom validity/expiration.
 - [ ] Support receiver address configuration.
 - [ ] Support app data or app code attribution.
 - [ ] Support gasless fee-in-sell-token accounting.
-- [ ] Support native token wrapping behavior if required.
+- [ ] Add native ETH/Eth-flow support as a distinct feature path if required.
 
-## Multi-Chain Support
+## Additional Chain Support
 
 - [ ] Add Ethereum mainnet support.
-- [ ] Add Base support.
 - [ ] Add Arbitrum support if needed.
 - [ ] Add Gnosis Chain support if needed.
 - [ ] Add Polygon support if needed.
 - [ ] Add Avalanche support if needed.
 - [ ] Add BNB support if needed.
 - [ ] Validate CoW API endpoints per chain.
-- [ ] Validate settlement contract addresses per chain.
+- [ ] Validate settlement/verifying contract addresses per chain.
+- [ ] Validate `GPv2VaultRelayer` addresses per chain.
+- [ ] Verify configured contract addresses by chain ID, checksum, deployed code, ABI compatibility, proxy status where applicable, and official sources.
 
 ## Production Hardening
 
@@ -75,8 +85,9 @@
 - [ ] Add health checks for Order Book API availability.
 - [ ] Add safeguards for stale quotes.
 - [ ] Add safeguards for duplicate submissions.
-- [ ] Add tests for API errors and malformed responses.
-- [ ] Add tests for restart/reconciliation behavior.
+- [ ] Add tests for API errors, malformed responses, expired orders, rejected quotes, rejected orders, unsupported tokens, unsupported chains, stale quotes, duplicate submissions, cancellation races, and unknown order states.
+- [ ] Add replay-focused signing tests for incorrect chain ID, verifying contract, validity bounds, and order UID mismatches.
+- [ ] Add Hummingbot compatibility tests for config, trading pair conversion, event emission, order state mapping, and connector interface expectations.
 - [ ] Run lint, typecheck, unit tests, and integration tests.
 - [ ] Prepare usage examples.
 - [ ] Prepare upstream contribution notes if submitting to Hummingbot.
