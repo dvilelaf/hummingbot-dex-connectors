@@ -14,6 +14,20 @@ COWSWAP_RUN_INTEGRATION=1 COWSWAP_ENV=staging \
 This proves quote/sign/post reachability and classified CoW rejections. It does
 not prove fills, settlement, approval flow, or production readiness.
 
+Opt-in funded lifecycle smoke:
+```bash
+COWSWAP_RUN_INTEGRATION=1 \
+COWSWAP_RUN_FULL_LIFECYCLE=1 \
+COWSWAP_ENV=staging \
+COWSWAP_TEST_PRIVATE_KEY=... \
+COWSWAP_FULL_LIFECYCLE_AMOUNT=... \
+  uv run pytest tests/test_cowpy_integration.py::test_live_full_lifecycle_posts_polls_and_cancels_or_settles
+```
+
+Use a low-value test account with ERC-20 balance and CoW VaultRelayer allowance.
+The private key is consumed only by the injected test signer and is not part of
+connector configuration.
+
 Runtime variables for a Hummingbot API image:
 ```bash
 export HUMMINGBOT_CONNECTOR=cowswap

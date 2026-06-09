@@ -13,6 +13,7 @@ from hummingbot_cowswap import (
     CoWConnector,
     CowPyEip712Signer,
     CoWToken,
+    OrderState,
     SellOrderRequest,
 )
 from hummingbot_cowswap.persistence import JsonOrderStore
@@ -72,3 +73,57 @@ async def test_live_quote_sign_post_reaches_cow_api_with_dummy_wallet(tmp_path: 
             expected in message
             for expected in ["InsufficientBalance", "InsufficientAllowance", "Quote", "balance"]
         ), message
+
+
+@pytest.mark.skipif(
+    os.environ.get("COWSWAP_RUN_FULL_LIFECYCLE") != "1",
+    reason=(
+        "set COWSWAP_RUN_FULL_LIFECYCLE=1 with a funded test account and allowance "
+        "to run the live quote/sign/post/poll/cancel lifecycle"
+    ),
+)
+@pytest.mark.asyncio
+async def test_live_full_lifecycle_posts_polls_and_cancels_or_settles(tmp_path: Path) -> None:
+    private_key = os.environ.get("COWSWAP_TEST_PRIVATE_KEY")
+    amount = os.environ.get("COWSWAP_FULL_LIFECYCLE_AMOUNT")
+    if not private_key or not amount:
+        pytest.skip("COWSWAP_TEST_PRIVATE_KEY and COWSWAP_FULL_LIFECYCLE_AMOUNT are required")
+
+    account = Account.from_key(private_key)
+    config = CoWConfig(
+        chain_id=int(os.environ.get("COWSWAP_CHAIN_ID", "8453")),
+        chain_name=os.environ.get("COWSWAP_CHAIN_NAME", "base"),
+        owner=account.address,
+        receiver=os.environ.get("COWSWAP_RECEIVER_ADDRESS", account.address),
+        app_data=os.environ.get("COWSWAP_APP_DATA", "0x" + "00" * 32),
+        slippage_bps=int(os.environ.get("COWSWAP_SLIPPAGE_BPS", "50")),
+        env=os.environ.get("COWSWAP_ENV", "staging"),
+    )
+    connector = CoWConnector(
+        config=config,
+        store=JsonOrderStore(tmp_path / "full-lifecycle-orders.json"),
+        signer=CowPyEip712Signer(config=config, account=account),
+    )
+
+    posted = await connector.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="funded-live-1",
+            trading_pair=os.environ.get("COWSWAP_SYMBOL", "USDC-WETH"),
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount=amount,
+        )
+    )
+    polled = await connector.poll_order(posted.client_order_id)
+    if polled.state in {OrderState.FILLED, OrderState.CANCELLED, OrderState.EXPIRED}:
+        terminal = polled
+    else:
+        terminal = await connector.cancel_order(posted.client_order_id)
+
+    assert terminal.order_uid == posted.order_uid
+    assert terminal.state in {
+        OrderState.FILLED,
+        OrderState.CANCELLED,
+        OrderState.EXPIRED,
+        OrderState.FAILED,
+    }
