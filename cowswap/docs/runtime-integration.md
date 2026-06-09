@@ -67,6 +67,65 @@ inside the `hummingbot-api` container and `GET /connectors/` includes
 `cowswap`. Marlin must use a container-reachable base URL such as
 `http://hummingbot-api:8000`, not `localhost`.
 
+### Local Runtime Packaging Smoke
+
+Until the final Docker image exists, validate the package artifact and runtime
+registration with the same Python environment that launches Hummingbot API.
+From this repository worktree:
+
+```bash
+cd cowswap
+uv build
+python -m pip install --force-reinstall dist/hummingbot_cowswap_connector-*.whl
+python -c "import hummingbot_cowswap; print(hummingbot_cowswap.__all__)"
+```
+
+For an editable local Hummingbot API checkout or container shell, install the
+package there instead:
+
+```bash
+python -m pip install -e /path/to/hummingbot-dex-connectors/cowswap
+export HUMMINGBOT_CONNECTOR=cowswap
+export SYMBOL=USDC-WETH
+python -c "import hummingbot_cowswap"
+```
+
+With Hummingbot API running, smoke the connector discovery surface before any
+order submission:
+
+```bash
+HB_API=http://localhost:8000
+AUTH="-u ${HUMMINGBOT_API_USERNAME}:${HUMMINGBOT_API_PASSWORD}"
+curl -fsS $AUTH "$HB_API/connectors/" | jq '.'
+curl -fsS $AUTH "$HB_API/connectors/cowswap/order-types" | jq '.'
+curl -fsS $AUTH \
+  "$HB_API/connectors/cowswap/trading-rules?trading_pairs=${SYMBOL}" | jq '.'
+```
+
+`/connectors/` must include `cowswap`; order types must include `MARKET`; and
+the trading-rules response must include the exact `SYMBOL`. If Basic Auth is
+disabled, omit `AUTH` from the `curl` commands.
+
+Minimal SELL market-style order payload shape for Hummingbot API:
+
+```bash
+curl -fsS $AUTH -X POST "$HB_API/trading/orders" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "account_name": "cow-runtime-smoke",
+    "connector_name": "cowswap",
+    "trading_pair": "USDC-WETH",
+    "trade_type": "SELL",
+    "amount": "10",
+    "order_type": "MARKET",
+    "position_action": "OPEN"
+  }' | jq '.'
+```
+
+Use staging or a deliberately low funded test account for smoke submissions.
+The response is acceptable only if it returns a Hummingbot client order ID and
+the connector records the CoW order UID or a classified rejection as evidence.
+
 ## Connector Surface
 
 For the MVP, Hummingbot API should report:
