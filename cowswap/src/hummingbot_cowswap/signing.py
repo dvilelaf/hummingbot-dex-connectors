@@ -1,21 +1,33 @@
+"""EIP-712 signing boundary for CoW orders."""
+
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
-from hummingbot_cowswap.models import CoWConfig
+
+if TYPE_CHECKING:
+    from hummingbot_cowswap.models import CoWConfig
 
 
 class OrderSigner(Protocol):
-    def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]: ...
+    """Protocol for Hummingbot-managed CoW order signers."""
+
+    def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
+        """Return a signed order payload suitable for CoW order posting."""
+        ...
 
 
 class CowPyEip712Signer:
+    """EIP-712 signer implementation using cowdao-cowpy primitives."""
+
     def __init__(self, *, config: CoWConfig, account: object) -> None:
+        """Create a signer for one CoW chain/environment and EOA account."""
         self.config = config
         self.account = account
 
     def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
+        """Sign a connector order payload and attach CoW signature metadata."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.contracts.order import Order
         from cowdao_cowpy.contracts.sign import SigningScheme, sign_order
@@ -49,6 +61,7 @@ class CowPyEip712Signer:
 
 
 def settlement_contract(config: CoWConfig) -> str:
+    """Resolve the CoW settlement verifying contract for a config."""
     if config.settlement_contract is not None:
         return config.settlement_contract
     if config.env == "staging":
@@ -64,4 +77,5 @@ def _signing_domain(config: CoWConfig) -> object:
     for chain in Chain:
         if chain.chain_id.value == config.chain_id:
             return domain(chain, settlement_contract(config))
-    raise ValueError(f"unsupported CoW chain_id: {config.chain_id}")
+    message = f"unsupported CoW chain_id: {config.chain_id}"
+    raise ValueError(message)

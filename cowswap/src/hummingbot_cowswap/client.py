@@ -1,29 +1,49 @@
+"""Thin adapter around cowdao-cowpy Order Book API calls."""
+
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
-from hummingbot_cowswap.models import CoWConfig
+
+if TYPE_CHECKING:
+    from hummingbot_cowswap.models import CoWConfig
 
 
 class CoWClient(Protocol):
-    async def quote_sell(self, request: dict[str, object]) -> Any: ...
+    """Protocol implemented by CoW API clients used by the connector."""
 
-    async def post_sell_order(self, order: dict[str, object]) -> str: ...
+    async def quote_sell(self, request: dict[str, object]) -> object:
+        """Request a CoW sell quote using connector-normalized fields."""
+        ...
 
-    async def get_order_status(self, order_uid: str) -> Any: ...
+    async def post_sell_order(self, order: dict[str, object]) -> str:
+        """Post a signed CoW sell order and return the CoW order UID."""
+        ...
 
-    async def get_trades(self, order_uid: str) -> list[Any]: ...
+    async def get_order_status(self, order_uid: str) -> object:
+        """Fetch the CoW order model for a previously posted UID."""
+        ...
 
-    async def cancel_order(self, order_uid: str) -> None: ...
+    async def get_trades(self, order_uid: str) -> list[object]:
+        """Fetch CoW trade/fill models for a previously posted UID."""
+        ...
+
+    async def cancel_order(self, order_uid: str) -> None:
+        """Request cancellation for a previously posted UID."""
+        ...
 
 
 class CowDaoOrderBookClient:
-    def __init__(self, config: CoWConfig) -> None:
-        self.config = config
-        self._api: Any | None = None
+    """CoW Order Book API client backed by cowdao-cowpy."""
 
-    async def quote_sell(self, request: dict[str, object]) -> Any:
+    def __init__(self, config: CoWConfig) -> None:
+        """Create a cowdao-cowpy API wrapper for one chain/environment."""
+        self.config = config
+        self._api: object | None = None
+
+    async def quote_sell(self, request: dict[str, object]) -> object:
+        """Build and submit a cowdao-cowpy sell quote request."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import (
             BuyTokenDestination,
@@ -57,9 +77,11 @@ class CowDaoOrderBookClient:
         )
 
     async def post_sell_order(self, order: dict[str, object]) -> str:
+        """Build and submit a cowdao-cowpy signed order request."""
         signature = order.get("signature")
         if signature is None:
-            raise ValueError("signed order payload must include signature before posting")
+            message = "signed order payload must include signature before posting"
+            raise ValueError(message)
 
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import (
@@ -91,24 +113,27 @@ class CowDaoOrderBookClient:
         uid = await self._order_book_api().post_order(order_creation)
         return uid.root
 
-    async def get_order_status(self, order_uid: str) -> Any:
+    async def get_order_status(self, order_uid: str) -> object:
+        """Fetch the cowdao-cowpy order status model by UID."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import UID
 
         return await self._order_book_api().get_order_by_uid(UID(order_uid))
 
-    async def get_trades(self, order_uid: str) -> list[Any]:
+    async def get_trades(self, order_uid: str) -> list[object]:
+        """Fetch cowdao-cowpy trade models for a CoW order UID."""
         ensure_cowpy_submodule_imports()
         from cowdao_cowpy.order_book.generated.model import UID
 
         return await self._order_book_api().get_trades_by_order_uid(UID(order_uid))
 
     async def cancel_order(self, order_uid: str) -> None:
-        raise NotImplementedError(
-            "CoW cancellation requires Hummingbot-managed signed cancellation"
-        )
+        """Reject cancellation until signed cancellation is wired in."""
+        message = "CoW cancellation requires Hummingbot-managed signed cancellation"
+        raise NotImplementedError(message)
 
-    def _order_book_api(self) -> Any:
+    def _order_book_api(self) -> object:
+        """Return the lazily initialized cowdao-cowpy OrderBookApi instance."""
         if self._api is None:
             ensure_cowpy_submodule_imports()
             from cowdao_cowpy.common.config import SupportedChainId

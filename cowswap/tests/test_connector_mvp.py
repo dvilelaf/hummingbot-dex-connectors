@@ -1,9 +1,12 @@
+"""Unit tests for the CoW connector MVP lifecycle."""
+
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
+from eth_account import Account
 
 from hummingbot_cowswap import (
     CoWConfig,
@@ -15,6 +18,9 @@ from hummingbot_cowswap import (
 )
 from hummingbot_cowswap.persistence import JsonOrderStore
 from hummingbot_cowswap.signing import settlement_contract
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 BASE_USDC = CoWToken(
     symbol="USDC",
@@ -138,8 +144,6 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
 
 @pytest.mark.asyncio
 async def test_submit_sell_order_signs_with_cowpy_eip712_dummy_account(tmp_path: Path) -> None:
-    from eth_account import Account
-
     client = FakeCoWClient()
     config = CoWConfig(
         chain_id=8453,

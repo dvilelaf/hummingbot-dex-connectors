@@ -33,20 +33,46 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = [
-    "ASYNC",
-    "B",
-    "C4",
-    "E",
-    "F",
-    "I",
-    "PERF",
-    "PIE",
-    "PT",
-    "PTH",
-    "RET",
-    "RUF",
-    "SIM",
-    "UP",
-    "W",
+select = ["ALL"]
+ignore = [
+    "COM812", # Conflicts with Ruff formatter.
+    "D203",   # Incompatible with D211.
+    "D213",   # Incompatible with D212.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/hummingbot_cowswap/client.py" = [
+    "PLC0415", # cowdao-cowpy has package import side effects; submodules are imported lazily.
+]
+"src/hummingbot_cowswap/persistence.py" = [
+    "PLR0913", # Persisted order metadata is intentionally explicit for restart recovery.
+]
+"src/hummingbot_cowswap/signing.py" = [
+    "PLC0415", # cowdao-cowpy has package import side effects; submodules are imported lazily.
+    "S106",    # CoW token balance mode strings are not passwords.
+]
+"tests/**/*.py" = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D107",
+    "PLC0415",
+    "PLR0913",
+    "PLR2004",
+    "S101",
+    "TC003",
+]
+"tests/test_cowpy_integration.py" = [
+    "BLE001", # cowdao-cowpy wraps API failures; the smoke test asserts the returned API text.
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D107",
+    "PLC0415",
+    "PLR0913",
+    "PLR2004",
+    "S101",
+    "TC003",
 ]

@@ -1,7 +1,9 @@
+"""Opt-in live CoW API smoke tests using generated dummy wallets."""
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from eth_account import Account
@@ -14,6 +16,9 @@ from hummingbot_cowswap import (
     SellOrderRequest,
 )
 from hummingbot_cowswap.persistence import JsonOrderStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("COWSWAP_RUN_INTEGRATION") != "1",
@@ -47,7 +52,7 @@ async def test_live_quote_sign_post_reaches_cow_api_with_dummy_wallet(tmp_path: 
     )
     connector = CoWConnector(
         config=config,
-        store=JsonOrderStore(Path(tmp_path) / "orders.json"),
+        store=JsonOrderStore(tmp_path / "orders.json"),
         signer=CowPyEip712Signer(config=config, account=account),
     )
 

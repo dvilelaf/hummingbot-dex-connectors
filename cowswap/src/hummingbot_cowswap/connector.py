@@ -1,4 +1,8 @@
+"""Hummingbot-style order lifecycle facade for CoW Swap."""
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from hummingbot_cowswap.client import CoWClient, CowDaoOrderBookClient
 from hummingbot_cowswap.models import (
@@ -10,11 +14,17 @@ from hummingbot_cowswap.models import (
     amount_to_atomic,
     apply_slippage_bps,
 )
-from hummingbot_cowswap.persistence import JsonOrderStore
-from hummingbot_cowswap.signing import OrderSigner
+
+if TYPE_CHECKING:
+    from hummingbot_cowswap.persistence import JsonOrderStore
+    from hummingbot_cowswap.signing import OrderSigner
+
+ORDER_DIGEST_HEX_LENGTH = 66
 
 
 class CoWConnector:
+    """Coordinate quote, sign, post, poll, cancel, and persistence flows."""
+
     def __init__(
         self,
         *,
@@ -23,6 +33,7 @@ class CoWConnector:
         client: CoWClient | None = None,
         signer: OrderSigner | None = None,
     ) -> None:
+        """Create a connector with injected API client, store, and optional signer."""
         self.config = config
         self.client = client or CowDaoOrderBookClient(config)
         self.store = store
@@ -35,6 +46,7 @@ class CoWConnector:
         amount: str,
         valid_to: int | None = None,
     ) -> tuple[object, str]:
+        """Request a sell quote and return the quote plus slippage-adjusted minimum buy."""
         quote = await self.client.quote_sell(
             {
                 "chain_id": self.config.chain_id,
@@ -50,6 +62,7 @@ class CoWConnector:
         return quote, apply_slippage_bps(_quote_buy_amount(quote), self.config.slippage_bps)
 
     async def submit_sell_order(self, request: SellOrderRequest) -> TrackedOrder:
+        """Quote, optionally sign, post, persist, and return a tracked sell order."""
         quote, minimum_buy_amount = await self.quote_sell(
             request.sell_token,
             request.buy_token,
@@ -96,6 +109,7 @@ class CoWConnector:
         return self.store.save(tracked)
 
     async def poll_order(self, client_order_id: str) -> TrackedOrder:
+        """Poll CoW status/trades and persist the mapped local order state."""
         tracked = self._load_order(client_order_id)
         status = await self.client.get_order_status(tracked.order_uid)
         trades = await self.client.get_trades(tracked.order_uid)
@@ -109,6 +123,7 @@ class CoWConnector:
         return self.store.save(tracked)
 
     async def cancel_order(self, client_order_id: str) -> TrackedOrder:
+        """Request cancellation through the client and reconcile the final state."""
         tracked = self._load_order(client_order_id)
         await self.client.cancel_order(tracked.order_uid)
         return await self.poll_order(client_order_id)
@@ -116,7 +131,8 @@ class CoWConnector:
     def _load_order(self, client_order_id: str) -> TrackedOrder:
         tracked = self.store.load(client_order_id)
         if tracked is None:
-            raise KeyError(f"unknown client_order_id: {client_order_id}")
+            message = f"unknown client_order_id: {client_order_id}"
+            raise KeyError(message)
         return tracked
 
 
@@ -144,8 +160,8 @@ def _first_tx_hash(trades: list[object]) -> str | None:
 
 
 def _digest_from_uid(order_uid: str) -> str:
-    if order_uid.startswith("0x") and len(order_uid) >= 66:
-        return order_uid[:66]
+    if order_uid.startswith("0x") and len(order_uid) >= ORDER_DIGEST_HEX_LENGTH:
+        return order_uid[:ORDER_DIGEST_HEX_LENGTH]
     return order_uid
 
 

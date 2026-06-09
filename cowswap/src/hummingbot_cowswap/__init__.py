@@ -1,3 +1,5 @@
+"""Public package exports for the CoW Swap connector MVP."""
+
 from hummingbot_cowswap.connector import CoWConnector
 from hummingbot_cowswap.models import (
     CoWConfig,

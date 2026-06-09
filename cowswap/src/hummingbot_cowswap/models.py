@@ -1,3 +1,5 @@
+"""Typed connector models and amount conversion helpers."""
+
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
@@ -6,13 +8,19 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+MAX_SLIPPAGE_BPS = 10_000
+
 
 class OrderSide(str, Enum):
+    """Supported logical order sides."""
+
     BUY = "buy"
     SELL = "sell"
 
 
 class OrderState(str, Enum):
+    """Local order states emitted by the CoW connector."""
+
     SUBMITTED = "submitted"
     OPEN = "open"
     PARTIALLY_FILLED = "partially_filled"
@@ -23,6 +31,8 @@ class OrderState(str, Enum):
 
 
 class CoWToken(BaseModel):
+    """ERC-20 token metadata required for amount normalization."""
+
     symbol: str
     address: str
     decimals: int
@@ -30,12 +40,16 @@ class CoWToken(BaseModel):
     @field_validator("decimals")
     @classmethod
     def validate_decimals(cls, value: int) -> int:
+        """Ensure token decimal precision is a non-negative integer."""
         if value < 0:
-            raise ValueError("token decimals must be non-negative")
+            message = "token decimals must be non-negative"
+            raise ValueError(message)
         return value
 
 
 class CoWConfig(BaseModel):
+    """Runtime configuration for one CoW chain/environment."""
+
     chain_id: int
     chain_name: str
     owner: str
@@ -49,12 +63,16 @@ class CoWConfig(BaseModel):
     @field_validator("slippage_bps")
     @classmethod
     def validate_slippage(cls, value: int) -> int:
-        if value < 0 or value >= 10_000:
-            raise ValueError("slippage_bps must be between 0 and 9999")
+        """Ensure slippage is expressed as valid basis points."""
+        if value < 0 or value >= MAX_SLIPPAGE_BPS:
+            message = "slippage_bps must be between 0 and 9999"
+            raise ValueError(message)
         return value
 
 
 class SellOrderRequest(BaseModel):
+    """Connector-level request for a quoted CoW sell order."""
+
     client_order_id: str
     trading_pair: str
     sell_token: CoWToken
@@ -65,6 +83,8 @@ class SellOrderRequest(BaseModel):
 
 
 class TrackedOrder(BaseModel):
+    """Persisted local metadata needed to recover and reconcile a CoW order."""
+
     client_order_id: str
     trading_pair: str
     order_uid: str
@@ -89,20 +109,25 @@ class TrackedOrder(BaseModel):
 
 
 def amount_to_atomic(amount: str, decimals: int) -> str:
+    """Convert a human decimal token amount into atomic units."""
     try:
         parsed = Decimal(amount)
     except InvalidOperation as exc:
-        raise ValueError(f"invalid decimal amount: {amount}") from exc
+        message = f"invalid decimal amount: {amount}"
+        raise ValueError(message) from exc
 
     if parsed <= 0:
-        raise ValueError("amount must be positive")
+        message = "amount must be positive"
+        raise ValueError(message)
 
     scale = Decimal(10) ** decimals
     atomic = parsed * scale
     if atomic != atomic.to_integral_value():
-        raise ValueError(f"amount has more precision than token decimals: {amount}")
+        message = f"amount has more precision than token decimals: {amount}"
+        raise ValueError(message)
     return str(int(atomic))
 
 
 def apply_slippage_bps(amount: str, slippage_bps: int) -> str:
-    return str(int(amount) * (10_000 - slippage_bps) // 10_000)
+    """Apply basis-point slippage to an atomic buy amount."""
+    return str(int(amount) * (MAX_SLIPPAGE_BPS - slippage_bps) // MAX_SLIPPAGE_BPS)
