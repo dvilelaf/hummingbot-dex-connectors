@@ -39,6 +39,12 @@ class FakeCoWClient:
     def __init__(self) -> None:
         self.quote_requests: list[dict[str, object]] = []
         self.posted_orders: list[dict[str, object]] = []
+        self.order_uid: str | None = None
+        self.default_order_uid = (
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            "713fb300"
+        )
         self.cancelled_uids: list[str] = []
         self.status = cow_order(status="open", executed_sell="0", executed_buy="0")
         self.trades: list[object] = []
@@ -67,11 +73,7 @@ class FakeCoWClient:
 
     async def post_sell_order(self, order: dict[str, object]) -> str:
         self.posted_orders.append(order)
-        return (
-            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            "714fb300"
-        )
+        return self.order_uid or str(order.get("expected_order_uid") or self.default_order_uid)
 
     async def get_order_status(self, order_uid: str) -> object:
         assert order_uid
@@ -278,6 +280,70 @@ async def test_submit_buy_order_signs_with_cowpy_eip712_dummy_account(tmp_path: 
     assert posted["signing_scheme"] == "eip712"
     assert posted["signature"].startswith("0x")
     assert len(posted["signature"]) == 132
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_rejects_tampered_signed_payload_before_posting(
+    tmp_path: Path,
+) -> None:
+    class TamperingSigner:
+        def sign_order_payload(self, order: dict[str, object]) -> dict[str, object]:
+            return {**order, "sell_amount": "999", "signature": "0x00", "signing_scheme": "eip712"}
+
+    client = FakeCoWClient()
+    cow = CoWConnector(
+        config=connector(tmp_path, client).config,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=TamperingSigner(),
+    )
+
+    with pytest.raises(ValueError, match="signed order sell_amount does not match quote"):
+        await cow.submit_sell_order(
+            SellOrderRequest(
+                client_order_id="cid-tampered",
+                trading_pair="USDC-WETH",
+                sell_token=BASE_USDC,
+                buy_token=BASE_WETH,
+                amount="1.0",
+            )
+        )
+
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_rejects_post_uid_mismatch_for_signed_order(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    account = Account.create()
+    config = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+        slippage_bps=50,
+    )
+    cow = CoWConnector(
+        config=config,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=config, account=account),
+    )
+    client.order_uid = client.default_order_uid
+
+    with pytest.raises(ValueError, match="posted order UID does not match signed order"):
+        await cow.submit_sell_order(
+            SellOrderRequest(
+                client_order_id="cid-uid-mismatch",
+                trading_pair="USDC-WETH",
+                sell_token=BASE_USDC,
+                buy_token=BASE_WETH,
+                amount="1.0",
+            )
+        )
 
 
 def test_settlement_contract_uses_staging_domain_when_configured() -> None:

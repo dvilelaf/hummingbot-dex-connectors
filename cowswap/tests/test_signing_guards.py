@@ -24,8 +24,10 @@ def config_for(owner: str, **overrides: object) -> CoWConfig:
 
 def order_payload(receiver: str) -> dict[str, object]:
     return {
+        "chain_id": 8453,
         "sell_token": "0x0000000000000000000000000000000000000001",
         "buy_token": "0x0000000000000000000000000000000000000002",
+        "owner": receiver,
         "receiver": receiver,
         "sell_amount": "1000000",
         "buy_amount": "500000",
@@ -60,3 +62,25 @@ def test_signer_rejects_account_owner_mismatch_before_signing() -> None:
 
     with pytest.raises(ValueError, match="signer account does not match config owner"):
         signer.sign_order_payload(order_payload(other_owner))
+
+
+def test_signer_rejects_cross_chain_order_payload() -> None:
+    account = Account.create()
+    signer = CowPyEip712Signer(config=config_for(account.address), account=account)
+    payload = order_payload(account.address)
+    payload["chain_id"] = 1
+
+    with pytest.raises(ValueError, match="order chain_id does not match config chain_id"):
+        signer.sign_order_payload(payload)
+
+
+def test_signer_attaches_expected_digest_and_uid_for_signed_order() -> None:
+    account = Account.create()
+    signer = CowPyEip712Signer(config=config_for(account.address), account=account)
+
+    signed = signer.sign_order_payload(order_payload(account.address))
+
+    assert str(signed["order_digest"]).startswith("0x")
+    assert len(str(signed["order_digest"])) == 66
+    assert str(signed["expected_order_uid"]).startswith(str(signed["order_digest"]))
+    assert str(signed["expected_order_uid"]).endswith("713fb300")

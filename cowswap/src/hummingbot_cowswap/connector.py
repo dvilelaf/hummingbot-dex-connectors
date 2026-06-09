@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from hummingbot_cowswap.signing import OrderSigner
 
 ORDER_DIGEST_HEX_LENGTH = 66
+ORDER_UID_HEX_LENGTH = 114
 EVM_ADDRESS_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
 
@@ -140,9 +141,12 @@ class CoWConnector:
             "partially_fillable": request.partially_fillable,
             "signing_scheme": "eip712",
         }
+        expected_order_payload = dict(order_payload)
         if self.signer is not None:
             order_payload = self.signer.sign_order_payload(order_payload)
+            _verify_signed_order_fields(order_payload, expected_order_payload)
         order_uid = await self.client.post_sell_order(order_payload)
+        _verify_posted_order_uid(order_uid, order_payload)
         tracked = self.store.save_new(
             client_order_id=request.client_order_id,
             trading_pair=request.trading_pair,
@@ -198,9 +202,12 @@ class CoWConnector:
             "partially_fillable": request.partially_fillable,
             "signing_scheme": "eip712",
         }
+        expected_order_payload = dict(order_payload)
         if self.signer is not None:
             order_payload = self.signer.sign_order_payload(order_payload)
+            _verify_signed_order_fields(order_payload, expected_order_payload)
         order_uid = await self.client.post_sell_order(order_payload)
+        _verify_posted_order_uid(order_uid, order_payload)
         tracked = self.store.save_new(
             client_order_id=request.client_order_id,
             trading_pair=request.trading_pair,
@@ -309,6 +316,59 @@ def _digest_from_uid(order_uid: str) -> str:
     if order_uid.startswith("0x") and len(order_uid) >= ORDER_DIGEST_HEX_LENGTH:
         return order_uid[:ORDER_DIGEST_HEX_LENGTH]
     return order_uid
+
+
+def _verify_signed_order_fields(order: dict[str, object], expected: dict[str, object]) -> None:
+    for field in (
+        "chain_id",
+        "sell_token",
+        "buy_token",
+        "owner",
+        "receiver",
+        "sell_amount",
+        "buy_amount",
+        "fee_amount",
+        "valid_to",
+        "quote_id",
+        "app_data",
+        "kind",
+        "partially_fillable",
+    ):
+        if order.get(field) != expected.get(field):
+            message = f"signed order {field} does not match quote"
+            raise ValueError(message)
+
+    if order.get("signing_scheme") != "eip712":
+        message = "signed order signing_scheme must be eip712"
+        raise ValueError(message)
+    if "signature" not in order:
+        message = "signed order signature is required"
+        raise ValueError(message)
+
+
+def _verify_posted_order_uid(order_uid: str, order: dict[str, object]) -> None:
+    if not order_uid.startswith("0x") or len(order_uid) != ORDER_UID_HEX_LENGTH:
+        message = f"invalid posted order UID: {order_uid}"
+        raise ValueError(message)
+
+    expected_uid = order.get("expected_order_uid")
+    if expected_uid is not None and str(expected_uid).lower() != order_uid.lower():
+        message = "posted order UID does not match signed order"
+        raise ValueError(message)
+
+    expected_digest = order.get("order_digest")
+    if (
+        expected_digest is not None
+        and str(expected_digest).lower() != _digest_from_uid(order_uid).lower()
+    ):
+        message = "posted order digest does not match signed order"
+        raise ValueError(message)
+
+    valid_to = int(order["valid_to"])
+    uid_valid_to = int(order_uid[-8:], 16)
+    if uid_valid_to != valid_to:
+        message = "posted order UID validTo does not match signed order"
+        raise ValueError(message)
 
 
 def _quote_id(quote: object) -> int | None:
