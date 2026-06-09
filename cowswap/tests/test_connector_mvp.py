@@ -9,6 +9,7 @@ import pytest
 from eth_account import Account
 
 from hummingbot_cowswap import (
+    NATIVE_TOKEN_ADDRESS,
     CoWConfig,
     CoWConnector,
     CowPyEip712Signer,
@@ -16,6 +17,7 @@ from hummingbot_cowswap import (
     OrderState,
     SellOrderRequest,
 )
+from hummingbot_cowswap.errors import CoWOrderBookAPIError, UnsupportedTokenError
 from hummingbot_cowswap.models import BuyOrderRequest
 from hummingbot_cowswap.persistence import JsonOrderStore
 from hummingbot_cowswap.signing import settlement_contract
@@ -33,6 +35,7 @@ BASE_WETH = CoWToken(
     address="0x0000000000000000000000000000000000000002",
     decimals=18,
 )
+NATIVE_ETH = CoWToken(symbol="ETH", address=NATIVE_TOKEN_ADDRESS, decimals=18)
 
 
 class FakeCoWClient:
@@ -51,6 +54,7 @@ class FakeCoWClient:
         self.status_sequence: list[object] = []
         self.trades: list[object] = []
         self.status_polls = 0
+        self.quote_verified = True
 
     async def quote_sell(self, request: dict[str, object]) -> object:
         self.quote_requests.append(request)
@@ -60,7 +64,7 @@ class FakeCoWClient:
             buy_amount="500000000000000000",
             fee_amount="1234",
             valid_to=1_900_000_000,
-            verified=True,
+            verified=self.quote_verified,
         )
 
     async def quote_buy(self, request: dict[str, object]) -> object:
@@ -71,7 +75,7 @@ class FakeCoWClient:
             buy_amount="500000000000000000",
             fee_amount="5678",
             valid_to=1_900_000_000,
-            verified=True,
+            verified=self.quote_verified,
         )
 
     async def post_sell_order(self, order: dict[str, object]) -> str:
@@ -200,14 +204,17 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert tracked.state is OrderState.OPEN
     assert tracked.client_order_id == "cid-1"
     assert tracked.order_uid.startswith("0xaaaa")
+    assert client.posted_orders[0]["sell_amount"] == "1001234"
     assert client.posted_orders[0]["buy_amount"] == "497500000000000000"
     assert client.posted_orders[0]["fee_amount"] == "1234"
     assert client.posted_orders[0]["quote_id"] == 99
+    assert tracked.sell_amount == "1001234"
     assert tracked.fee_amount == "1234"
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
+    assert recovered.sell_amount == "1001234"
     assert recovered.fee_amount == "1234"
     assert recovered.state is OrderState.OPEN
 
@@ -228,6 +235,79 @@ async def test_submit_sell_order_requires_hummingbot_managed_signer_before_posti
         await cow.submit_sell_order(
             SellOrderRequest(
                 client_order_id="cid-no-signer",
+                trading_pair="USDC-WETH",
+                sell_token=BASE_USDC,
+                buy_token=BASE_WETH,
+                amount="1.0",
+            )
+        )
+
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_rejects_native_token_regular_path_before_posting(
+    tmp_path: Path,
+) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+
+    with pytest.raises(UnsupportedTokenError, match="EthFlow"):
+        await cow.submit_sell_order(
+            SellOrderRequest(
+                client_order_id="cid-native",
+                trading_pair="ETH-USDC",
+                sell_token=NATIVE_ETH,
+                buy_token=BASE_USDC,
+                amount="1.0",
+            )
+        )
+
+    assert client.quote_requests == []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("sell_token", "buy_token"),
+    [
+        (NATIVE_ETH, BASE_USDC),
+        (BASE_USDC, NATIVE_ETH),
+    ],
+)
+async def test_submit_buy_order_rejects_native_token_regular_path_before_posting(
+    tmp_path: Path,
+    sell_token: CoWToken,
+    buy_token: CoWToken,
+) -> None:
+    client = FakeCoWClient()
+    cow = connector(tmp_path, client)
+
+    with pytest.raises(UnsupportedTokenError, match="wrapped tokens"):
+        await cow.submit_buy_order(
+            BuyOrderRequest(
+                client_order_id="cid-buy-native",
+                trading_pair="ETH-USDC",
+                sell_token=sell_token,
+                buy_token=buy_token,
+                amount="0.5",
+            )
+        )
+
+    assert client.quote_requests == []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_sell_order_rejects_unverified_quote_before_posting(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    client.quote_verified = False
+    cow = connector(tmp_path, client)
+
+    with pytest.raises(CoWOrderBookAPIError, match="not verified"):
+        await cow.submit_sell_order(
+            SellOrderRequest(
+                client_order_id="cid-unverified",
                 trading_pair="USDC-WETH",
                 sell_token=BASE_USDC,
                 buy_token=BASE_WETH,
@@ -306,6 +386,26 @@ async def test_submit_buy_order_posts_quote_derived_order_and_tracks_open_state(
     assert recovered.order_uid == tracked.order_uid
     assert recovered.fee_amount == "5678"
     assert recovered.state is OrderState.OPEN
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_order_rejects_unverified_quote_before_posting(tmp_path: Path) -> None:
+    client = FakeCoWClient()
+    client.quote_verified = False
+    cow = connector(tmp_path, client)
+
+    with pytest.raises(CoWOrderBookAPIError, match="not verified"):
+        await cow.submit_buy_order(
+            BuyOrderRequest(
+                client_order_id="cid-buy-unverified",
+                trading_pair="USDC-WETH",
+                sell_token=BASE_USDC,
+                buy_token=BASE_WETH,
+                amount="0.5",
+            )
+        )
+
+    assert client.posted_orders == []
 
 
 @pytest.mark.asyncio

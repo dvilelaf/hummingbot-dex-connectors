@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from hummingbot_cowswap.chain_config import chain_config
 from hummingbot_cowswap.client import CoWClient, CowDaoOrderBookClient
 from hummingbot_cowswap.errors import (
+    CoWOrderBookAPIError,
     DuplicateOrderError,
     InsufficientAllowanceError,
     InsufficientBalanceError,
@@ -26,6 +27,7 @@ from hummingbot_cowswap.models import (
     apply_buy_slippage_bps,
     apply_slippage_bps,
 )
+from hummingbot_cowswap.onchain import is_native_token
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -126,6 +128,7 @@ class CoWConnector:
             raise DuplicateOrderError(message)
 
         _validate_order_tokens(request.sell_token, request.buy_token)
+        _reject_native_regular_order(request.sell_token, request.buy_token)
         sell_amount = amount_to_atomic(request.amount, request.sell_token.decimals)
         self._preflight_sell(request.sell_token, sell_amount)
         quote, minimum_buy_amount = await self.quote_sell(
@@ -134,18 +137,21 @@ class CoWConnector:
             request.amount,
             request.valid_to,
         )
+        _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
         fee_amount = _quote_fee_amount(quote)
+        order_sell_amount = _sell_amount_before_fee(quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
+        self._preflight_sell(request.sell_token, order_sell_amount)
         order_payload = {
             "chain_id": self.config.chain_id,
             "sell_token": request.sell_token.address,
             "buy_token": request.buy_token.address,
             "owner": self.config.owner,
             "receiver": self.config.receiver,
-            "sell_amount": _quote_sell_amount(quote),
+            "sell_amount": order_sell_amount,
             "buy_amount": minimum_buy_amount,
             "fee_amount": fee_amount,
             "valid_to": quote_valid_to,
@@ -168,7 +174,7 @@ class CoWConnector:
             chain_id=self.config.chain_id,
             sell_token=request.sell_token,
             buy_token=request.buy_token,
-            sell_amount=_quote_sell_amount(quote),
+            sell_amount=order_sell_amount,
             buy_amount=minimum_buy_amount,
             valid_to=quote_valid_to,
             quote_id=_quote_id(quote),
@@ -198,6 +204,7 @@ class CoWConnector:
             raise DuplicateOrderError(message)
 
         _validate_order_tokens(request.sell_token, request.buy_token)
+        _reject_native_regular_order(request.sell_token, request.buy_token)
         _validate_chain(self.config)
         quote, maximum_sell_amount = await self.quote_buy(
             request.sell_token,
@@ -205,6 +212,7 @@ class CoWConnector:
             request.amount,
             request.valid_to,
         )
+        _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
         fee_amount = _quote_fee_amount(quote)
         if quote_valid_to <= int(self.clock()):
@@ -349,6 +357,13 @@ def _validate_order_tokens(sell_token: CoWToken, buy_token: CoWToken) -> None:
     _validate_token(buy_token)
 
 
+def _reject_native_regular_order(sell_token: CoWToken, buy_token: CoWToken) -> None:
+    if not (is_native_token(sell_token) or is_native_token(buy_token)):
+        return
+    message = "native-token orders must use EthFlow planning or wrapped tokens"
+    raise UnsupportedTokenError(message)
+
+
 def _validate_chain(config: CoWConfig) -> None:
     chain_config(config.chain_id, config.env)
 
@@ -432,6 +447,16 @@ def _verify_posted_order_uid(order_uid: str, order: dict[str, object]) -> None:
 def _quote_id(quote: object) -> int | None:
     quote_id = _field(quote, "id", None)
     return None if quote_id is None else int(cast("Any", quote_id))
+
+
+def _validate_verified_quote(quote: object) -> None:
+    if _field(quote, "verified", default=False) is not True:
+        message = "CoW quote is not verified"
+        raise CoWOrderBookAPIError(message)
+
+
+def _sell_amount_before_fee(quote: object) -> str:
+    return str(int(_quote_sell_amount(quote)) + int(_quote_fee_amount(quote)))
 
 
 def _quote_sell_amount(quote: object) -> str:

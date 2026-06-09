@@ -221,6 +221,32 @@ async def test_sell_can_wait_for_settlement_before_emitting_filled_success() -> 
     assert adapter.event_log[-1].order_state == "FILLED"
 
 
+@pytest.mark.asyncio
+async def test_buy_can_wait_for_settlement_before_emitting_filled_success() -> None:
+    connector = FakeConnector()
+    filled_order = _tracked_order("cid-buy-settled", OrderState.FILLED)
+    connector.poll_updates = [filled_order]
+    adapter = HummingbotCoWAdapter(connector, {"USDC-WETH": (USDC, WETH)})
+
+    result = await adapter.buy(
+        "USDC-WETH",
+        Decimal("0.5"),
+        client_order_id="cid-buy-settled",
+        wait_for_settlement=True,
+    )
+
+    assert connector.polls == ["cid-buy-settled"]
+    assert result == filled_order
+    assert adapter.in_flight_orders["cid-buy-settled"] == filled_order
+    assert adapter.order_statuses == {"cid-buy-settled": "FILLED"}
+    assert [event.event_tag for event in adapter.event_log] == [
+        "BuyOrderCreated",
+        "OrderFilled",
+    ]
+    assert adapter.event_log[-1].client_order_id == "cid-buy-settled"
+    assert adapter.event_log[-1].order_state == "FILLED"
+
+
 def test_adapter_maps_order_updates_to_hummingbot_style_events() -> None:
     adapter = HummingbotCoWAdapter(FakeConnector(), {"USDC-WETH": (USDC, WETH)})
 

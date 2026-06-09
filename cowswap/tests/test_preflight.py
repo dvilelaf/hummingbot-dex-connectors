@@ -48,10 +48,11 @@ ETH = CoWToken(
 class FakeClient:
     """CoW client fake with configurable quote validity."""
 
-    def __init__(self, *, valid_to: int = 1_900_000_000) -> None:
+    def __init__(self, *, valid_to: int = 1_900_000_000, fee_amount: str = "0") -> None:
         self.quote_requests: list[dict[str, object]] = []
         self.posted_orders: list[dict[str, object]] = []
         self.valid_to = valid_to
+        self.fee_amount = fee_amount
 
     async def quote_sell(self, request: dict[str, object]) -> object:
         """Return a minimal cowpy-shaped quote."""
@@ -62,7 +63,7 @@ class FakeClient:
             quote=SimpleNamespace(
                 sellAmount=SimpleNamespace(root="1000000"),
                 buyAmount=SimpleNamespace(root="500000000000000000"),
-                feeAmount=SimpleNamespace(root="0"),
+                feeAmount=SimpleNamespace(root=self.fee_amount),
                 validTo=self.valid_to,
             ),
         )
@@ -76,7 +77,7 @@ class FakeClient:
             quote=SimpleNamespace(
                 sellAmount=SimpleNamespace(root="1000000"),
                 buyAmount=SimpleNamespace(root="500000000000000000"),
-                feeAmount=SimpleNamespace(root="0"),
+                feeAmount=SimpleNamespace(root=self.fee_amount),
                 validTo=self.valid_to,
             ),
         )
@@ -214,6 +215,48 @@ async def test_submit_rejects_insufficient_allowance_separately(tmp_path: Path) 
         await cow.submit_sell_order(request())
 
     assert client.quote_requests == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rechecks_balance_and_allowance_against_quote_fee(tmp_path: Path) -> None:
+    """Final preflight includes CoW network fee added to sell orders."""
+    client = FakeClient(fee_amount="1234")
+    reader = FakeEvmReader(balance="1000000", allowance="1000000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+
+    with pytest.raises(InsufficientBalanceError):
+        await cow.submit_sell_order(request())
+
+    assert client.quote_requests != []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rechecks_allowance_against_quote_fee(tmp_path: Path) -> None:
+    """Final preflight rejects allowance that covers only the pre-quote amount."""
+    client = FakeClient(fee_amount="1234")
+    reader = FakeEvmReader(balance="1001234", allowance="1000000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+
+    with pytest.raises(InsufficientAllowanceError):
+        await cow.submit_sell_order(request())
+
+    assert client.quote_requests != []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_stale_quote_before_fee_preflight(tmp_path: Path) -> None:
+    """Stale quotes keep their error mapping even when final fee preflight would fail."""
+    client = FakeClient(valid_to=1_000, fee_amount="1234")
+    reader = FakeEvmReader(balance="1000000", allowance="1000000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+
+    with pytest.raises(StaleQuoteError):
+        await cow.submit_sell_order(request())
+
+    assert client.quote_requests != []
+    assert client.posted_orders == []
 
 
 @pytest.mark.asyncio

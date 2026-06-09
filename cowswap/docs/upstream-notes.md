@@ -18,8 +18,8 @@ Do not sell yet:
 - No claim of production readiness, settlement proof, or autonomous execution.
 - No claim of generic limit orders, native ETH flow, or funded-account
   settlement coverage.
-- No claim that staging smoke tests prove fills; they only prove API
-  reachability and classified rejection with a dummy wallet.
+- No claim that dummy-wallet staging smoke tests prove fills, signing, or order
+  posting; they only prove quote API reachability.
 
 License note:
 

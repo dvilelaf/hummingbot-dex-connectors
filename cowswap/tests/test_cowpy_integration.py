@@ -40,7 +40,7 @@ BASE_WETH = CoWToken(
 
 
 @pytest.mark.asyncio
-async def test_live_quote_sign_post_reaches_cow_api_with_dummy_wallet(tmp_path: Path) -> None:
+async def test_live_quote_reaches_cow_api_with_dummy_wallet(tmp_path: Path) -> None:
     account = Account.create()
     config = CoWConfig(
         chain_id=8453,
@@ -57,22 +57,10 @@ async def test_live_quote_sign_post_reaches_cow_api_with_dummy_wallet(tmp_path: 
         signer=CowPyEip712Signer(config=config, account=account),
     )
 
-    try:
-        await connector.submit_sell_order(
-            SellOrderRequest(
-                client_order_id="dummy-live-1",
-                trading_pair="USDC-WETH",
-                sell_token=BASE_USDC,
-                buy_token=BASE_WETH,
-                amount="1",
-            )
-        )
-    except Exception as exc:
-        message = str(exc)
-        assert any(
-            expected in message
-            for expected in ["InsufficientBalance", "InsufficientAllowance", "Quote", "balance"]
-        ), message
+    quote, minimum_buy_amount = await connector.quote_sell(BASE_USDC, BASE_WETH, "1")
+
+    assert quote is not None
+    assert int(minimum_buy_amount) > 0
 
 
 @pytest.mark.skipif(

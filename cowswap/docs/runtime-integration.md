@@ -307,5 +307,6 @@ Ledger rules:
   Native-token buys should target wrapped tokens first.
 - No generic limit-order support until the Hummingbot order-type mapping is
   specified.
-- Staging smoke tests prove quote/sign/post API reachability and classified
-  rejection with a dummy wallet; they do not prove settlement.
+- Staging dummy-wallet smoke tests prove quote API reachability only; they do
+  not prove signing, posting, or settlement. Use the funded lifecycle smoke for
+  quote/sign/post/poll/cancel coverage.

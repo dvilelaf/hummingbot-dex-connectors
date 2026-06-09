@@ -11,8 +11,9 @@ COWSWAP_RUN_INTEGRATION=1 COWSWAP_ENV=staging \
   uv run pytest tests/test_cowpy_integration.py
 ```
 
-This proves quote/sign/post reachability and classified CoW rejections. It does
-not prove fills, settlement, approval flow, or production readiness.
+This proves CoW quote API reachability with an unfunded generated wallet. It
+does not prove signing, posting, fills, settlement, approval flow, or production
+readiness.
 
 Opt-in funded lifecycle smoke:
 ```bash
@@ -25,6 +26,7 @@ COWSWAP_FULL_LIFECYCLE_AMOUNT=... \
 ```
 
 Use a low-value test account with ERC-20 balance and CoW VaultRelayer allowance.
+That smoke covers quote, sign, post, poll, cancel, and terminal status handling.
 The private key is consumed only by the injected test signer and is not part of
 connector configuration.
 

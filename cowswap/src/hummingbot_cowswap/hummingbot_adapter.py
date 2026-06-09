@@ -217,11 +217,7 @@ class HummingbotCoWAdapter:
         """Convert a Hummingbot-style SELL submission into a SellOrderRequest."""
         _reject_private_key_material(kwargs)
         wait_for_settlement = bool(kwargs.pop("wait_for_settlement", False))
-        max_status_polls_value = kwargs.pop("max_status_polls", 1)
-        if not isinstance(max_status_polls_value, int | str):
-            message = "max_status_polls must be an integer"
-            raise TypeError(message)
-        max_status_polls = int(max_status_polls_value)
+        max_status_polls = _max_status_polls(kwargs)
         if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
             message = f"unsupported order_type for CoW shim: {order_type}"
             raise ValueError(message)
@@ -268,6 +264,8 @@ class HummingbotCoWAdapter:
     ) -> object:
         """Convert a Hummingbot-style BUY submission into a BuyOrderRequest."""
         _reject_private_key_material(kwargs)
+        wait_for_settlement = bool(kwargs.pop("wait_for_settlement", False))
+        max_status_polls = _max_status_polls(kwargs)
         if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
             message = f"unsupported order_type for CoW shim: {order_type}"
             raise ValueError(message)
@@ -295,6 +293,11 @@ class HummingbotCoWAdapter:
                 amount=str(amount),
             ),
         )
+        if wait_for_settlement:
+            tracked = await self._poll_until_terminal(
+                request.client_order_id,
+                max_polls=max_status_polls,
+            )
         return tracked
 
     async def cancel(self, client_order_id: str) -> object:
@@ -379,6 +382,14 @@ def _new_client_order_id(trading_pair: str) -> str:
 
 def _normalize_trading_pair(trading_pair: str) -> str:
     return trading_pair.replace("/", "-").replace("_", "-").upper()
+
+
+def _max_status_polls(kwargs: dict[str, object]) -> int:
+    max_status_polls_value = kwargs.pop("max_status_polls", 1)
+    if not isinstance(max_status_polls_value, int | str):
+        message = "max_status_polls must be an integer"
+        raise TypeError(message)
+    return int(max_status_polls_value)
 
 
 def _hummingbot_order_state(order: object) -> str:
