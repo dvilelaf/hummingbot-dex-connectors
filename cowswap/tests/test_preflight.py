@@ -18,7 +18,13 @@ from hummingbot_cowswap.errors import (
     UnsupportedTokenError,
 )
 from hummingbot_cowswap.models import BuyOrderRequest
-from hummingbot_cowswap.onchain import ApprovalPolicy, FakeEvmReader
+from hummingbot_cowswap.onchain import (
+    NATIVE_TOKEN_ADDRESS,
+    ApprovalPolicy,
+    EthFlowPolicy,
+    FakeEvmReader,
+    is_native_token,
+)
 from hummingbot_cowswap.persistence import JsonOrderStore
 
 OWNER = "0x00000000000000000000000000000000000000aa"
@@ -30,6 +36,11 @@ USDC = CoWToken(
 WETH = CoWToken(
     symbol="WETH",
     address="0x4200000000000000000000000000000000000006",
+    decimals=18,
+)
+ETH = CoWToken(
+    symbol="ETH",
+    address=NATIVE_TOKEN_ADDRESS,
     decimals=18,
 )
 
@@ -320,3 +331,75 @@ async def test_submit_buy_rejects_duplicate_client_order_id(tmp_path: Path) -> N
         await cow.submit_buy_order(buy_request("cid-buy-dup"))
 
     assert len(client.posted_orders) == 1
+
+
+def test_eth_flow_policy_builds_native_sell_create_order_intent() -> None:
+    """Native ETH sells use a distinct EthFlow on-chain transaction path."""
+    policy = EthFlowPolicy(chain_config(8453, "prod"))
+
+    intent = policy.build_create_order_transaction(
+        sell_token=ETH,
+        buy_token=USDC,
+        owner=OWNER,
+        receiver=OWNER,
+        sell_amount="1000000000000000000",
+        buy_amount="2500000000",
+        fee_amount="1000000000000000",
+        valid_to=1_900_000_000,
+        app_data="0x" + "00" * 32,
+        quote_id=123,
+        partially_fillable=False,
+    )
+
+    assert is_native_token(ETH) is True
+    assert intent["method"] == "createOrder"
+    assert intent["signing_scheme"] == "eip1271"
+    assert intent["onchain_order"] is True
+    assert intent["native_token_address"] == NATIVE_TOKEN_ADDRESS
+    assert intent["value"] == "1001000000000000000"
+    assert intent["order"] == {
+        "buy_token": USDC.address,
+        "receiver": OWNER,
+        "sell_amount": "1000000000000000000",
+        "buy_amount": "2500000000",
+        "app_data": "0x" + "00" * 32,
+        "fee_amount": "1000000000000000",
+        "valid_to": "1900000000",
+        "partially_fillable": False,
+        "quote_id": "123",
+    }
+
+
+def test_eth_flow_policy_rejects_erc20_sell_token_for_native_path() -> None:
+    """ERC-20 sells must keep using the regular approval and signing path."""
+    policy = EthFlowPolicy(chain_config(8453, "prod"))
+
+    with pytest.raises(ValueError, match="native-token marker"):
+        policy.build_create_order_transaction(
+            sell_token=USDC,
+            buy_token=WETH,
+            owner=OWNER,
+            receiver=OWNER,
+            sell_amount="1000000",
+            buy_amount="1",
+            fee_amount="0",
+            valid_to=1_900_000_000,
+            app_data="0x" + "00" * 32,
+            quote_id=123,
+            partially_fillable=False,
+        )
+
+
+def test_eth_flow_policy_builds_invalidate_order_intent() -> None:
+    """Native ETH cancellation uses an on-chain invalidateOrder/refund path."""
+    policy = EthFlowPolicy(chain_config(8453, "prod"))
+    order = {"buy_token": USDC.address, "sell_amount": "1"}
+
+    intent = policy.build_invalidate_order_transaction(owner=OWNER, order=order)
+
+    assert intent == {
+        "chain_id": "8453",
+        "from": OWNER,
+        "method": "invalidateOrder",
+        "order": order,
+    }

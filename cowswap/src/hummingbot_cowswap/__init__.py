@@ -23,6 +23,7 @@ from hummingbot_cowswap.models import (
     SellOrderRequest,
     TrackedOrder,
 )
+from hummingbot_cowswap.onchain import NATIVE_TOKEN_ADDRESS, EthFlowPolicy, is_native_token
 from hummingbot_cowswap.runtime_metadata import (
     connector_metadata,
     evaluate_readiness,
@@ -32,6 +33,7 @@ from hummingbot_cowswap.runtime_metadata import (
 from hummingbot_cowswap.signing import CowPyEip712Signer
 
 __all__ = [
+    "NATIVE_TOKEN_ADDRESS",
     "BuyOrderRequest",
     "CoWConfig",
     "CoWConnector",
@@ -42,6 +44,7 @@ __all__ = [
     "CoWToken",
     "CowPyEip712Signer",
     "DuplicateOrderError",
+    "EthFlowPolicy",
     "HummingbotCoWAdapter",
     "HummingbotTradingRule",
     "InsufficientAllowanceError",
@@ -56,5 +59,6 @@ __all__ = [
     "connector_metadata",
     "evaluate_readiness",
     "hummingbot_api_responses",
+    "is_native_token",
     "readiness_contract",
 ]

@@ -109,7 +109,11 @@ Order-state mapping currently implemented:
 
 Live limitations:
 
-- Buy/sell ERC-20/WETH only; no native ETH or generic limit orders.
+- ERC-20/WETH buy and sell use the regular CoW order path; native ETH sells use
+  the distinct EthFlow transaction planning path with the CoW native-token
+  marker address and EIP-1271/on-chain order semantics.
+- Native-token buys should target wrapped tokens first.
+- No generic limit orders.
 - Submitted signed intents are not fills; final ledgers need terminal
   order/trade/settlement evidence.
 - Cancellation uses signed off-chain cancellation when the runtime signer is

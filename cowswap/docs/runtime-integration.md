@@ -303,7 +303,8 @@ Ledger rules:
 - Supported chains are Ethereum, Gnosis, Polygon, Base, Arbitrum One,
   Avalanche C-Chain, and BNB Smart Chain.
 - Buy and sell orders only.
-- ERC-20/WETH only; native ETH flow is a separate feature.
+- ERC-20/WETH regular orders plus native ETH sell planning through EthFlow.
+  Native-token buys should target wrapped tokens first.
 - No generic limit-order support until the Hummingbot order-type mapping is
   specified.
 - Staging smoke tests prove quote/sign/post API reachability and classified
