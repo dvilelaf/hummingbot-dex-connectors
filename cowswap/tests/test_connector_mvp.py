@@ -181,7 +181,7 @@ async def test_quote_buy_normalizes_amounts_and_translates_slippage(tmp_path: Pa
     ]
     assert quote.quote.sellAmount.root == "1000000"
     assert quote.quote.buyAmount.root == "500000000000000000"
-    assert maximum_sell_amount == "1005000"
+    assert maximum_sell_amount == "1010707"
 
 
 @pytest.mark.asyncio
@@ -210,12 +210,14 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     assert client.posted_orders[0]["quote_id"] == 99
     assert tracked.sell_amount == "1001234"
     assert tracked.fee_amount == "1234"
+    assert tracked.metadata["signing_mode"] == "hummingbot-managed"
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
     assert recovered.sell_amount == "1001234"
     assert recovered.fee_amount == "1234"
+    assert recovered.metadata["signing_mode"] == "hummingbot-managed"
     assert recovered.state is OrderState.OPEN
 
 
@@ -375,16 +377,20 @@ async def test_submit_buy_order_posts_quote_derived_order_and_tracks_open_state(
     assert tracked.client_order_id == "cid-buy-1"
     assert tracked.order_uid.startswith("0xaaaa")
     assert client.posted_orders[0]["kind"] == "buy"
-    assert client.posted_orders[0]["sell_amount"] == "1005000"
+    assert client.posted_orders[0]["sell_amount"] == "1010707"
     assert client.posted_orders[0]["buy_amount"] == "500000000000000000"
     assert client.posted_orders[0]["fee_amount"] == "5678"
     assert client.posted_orders[0]["quote_id"] == 100
+    assert tracked.sell_amount == "1010707"
     assert tracked.fee_amount == "5678"
+    assert tracked.metadata["signing_mode"] == "hummingbot-managed"
 
     recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-buy-1")
     assert recovered is not None
     assert recovered.order_uid == tracked.order_uid
+    assert recovered.sell_amount == "1010707"
     assert recovered.fee_amount == "5678"
+    assert recovered.metadata["signing_mode"] == "hummingbot-managed"
     assert recovered.state is OrderState.OPEN
 
 

@@ -3,13 +3,43 @@
   "version": "0.1.0",
   "description": "Aerodrome Gateway-style router connector for Base stable and volatile swaps.",
   "type": "module",
-  "private": true,
+  "private": false,
+  "main": "./dist/cjs/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "require": "./dist/cjs/src/index.js"
+    },
+    "./router-routes": {
+      "types": "./dist/src/router-routes/index.d.ts",
+      "import": "./dist/src/router-routes/index.js",
+      "require": "./dist/cjs/src/router-routes/index.js"
+    },
+    "./liquidity": {
+      "types": "./dist/src/liquidity/index.d.ts",
+      "import": "./dist/src/liquidity/index.js",
+      "require": "./dist/cjs/src/liquidity/index.js"
+    },
+    "./gateway-adapter": {
+      "types": "./dist/src/gateway-adapter.d.ts",
+      "import": "./dist/src/gateway-adapter.js",
+      "require": "./dist/cjs/src/gateway-adapter.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "dist/cjs",
+    "README.md"
+  ],
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && tsc --project tsconfig.cjs.json && node scripts/write-cjs-package.cjs",
+    "prepare": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run",

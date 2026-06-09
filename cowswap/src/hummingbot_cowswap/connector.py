@@ -119,7 +119,10 @@ class CoWConnector:
                 "valid_to": valid_to or self.config.valid_to,
             }
         )
-        return quote, apply_buy_slippage_bps(_quote_sell_amount(quote), self.config.slippage_bps)
+        return quote, apply_buy_slippage_bps(
+            _quote_sell_amount_with_fee(quote),
+            self.config.slippage_bps,
+        )
 
     async def submit_sell_order(self, request: SellOrderRequest) -> TrackedOrder:
         """Quote, optionally sign, post, persist, and return a tracked sell order."""
@@ -140,7 +143,7 @@ class CoWConnector:
         _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
         fee_amount = _quote_fee_amount(quote)
-        order_sell_amount = _sell_amount_before_fee(quote)
+        order_sell_amount = _quote_sell_amount_with_fee(quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -455,7 +458,7 @@ def _validate_verified_quote(quote: object) -> None:
         raise CoWOrderBookAPIError(message)
 
 
-def _sell_amount_before_fee(quote: object) -> str:
+def _quote_sell_amount_with_fee(quote: object) -> str:
     return str(int(_quote_sell_amount(quote)) + int(_quote_fee_amount(quote)))
 
 

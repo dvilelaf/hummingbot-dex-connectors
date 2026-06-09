@@ -52,6 +52,7 @@ const AERO_POOL = getAddress('0x2222222222222222222222222222222222222222');
 const WETH_POOL = getAddress('0x3333333333333333333333333333333333333333');
 const ONE_USDC = BigNumber.from('1000000');
 const HALF_WETH = BigNumber.from('500000000000000000');
+const DEFAULT_GAS = '250000';
 
 const routerInterface = new Interface(ROUTER_ABI);
 const registryInterface = new Interface(FACTORY_REGISTRY_ABI);
@@ -92,6 +93,7 @@ class FakeProvider implements AerodromeProvider {
   public usdcDecimals = 6;
   public wethDecimals = 18;
   public gasEstimate = BigNumber.from('180000');
+  public estimateGasError: Error | undefined;
   public readonly malformedCalls = new Set<string>();
   public readonly calls: CallRequest[] = [];
   public readonly estimated: TransactionRequest[] = [];
@@ -149,6 +151,9 @@ class FakeProvider implements AerodromeProvider {
 
   public estimateGas(transaction: Readonly<TransactionRequest>): Promise<BigNumber> {
     this.estimated.push({ ...transaction });
+    if (this.estimateGasError !== undefined) {
+      return Promise.reject(this.estimateGasError);
+    }
     return Promise.resolve(this.gasEstimate);
   }
 
@@ -565,8 +570,25 @@ describe('Aerodrome router connector', () => {
     expect(plan.swap.to).toBe(BASE_MAINNET.contracts.router);
     expect(plan.swap.from).toBe(OWNER);
     expect(plan.swap.value).toBe('0');
-    expect(plan.swap.gasEstimate).toBe('180000');
-    expect(provider.estimated).toHaveLength(1);
+    expect(plan.swap.gasEstimate).toBe(DEFAULT_GAS);
+    expect(provider.estimated).toHaveLength(0);
+  });
+
+  it('does not estimate swap gas before a required token approval is mined', async () => {
+    const provider = new FakeProvider();
+    provider.allowanceAmount = BigNumber.from(0);
+    provider.estimateGasError = new Error('execution reverted: allowance');
+    const connector = new Aerodrome(provider, BASE_MAINNET, () => 1_700_000_000);
+
+    const plan = await connector.executeSwap({
+      ...request(),
+      walletAddress: OWNER,
+      deadline: 1_700_000_120,
+    });
+
+    expect(plan.approval?.to).toBe(BASE_TOKENS.USDC.address);
+    expect(plan.swap.gasEstimate).toBe(DEFAULT_GAS);
+    expect(provider.estimated).toHaveLength(0);
   });
 
   it('rejects execution with expired deadline, stale output, or insufficient balance', async () => {

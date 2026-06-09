@@ -253,7 +253,8 @@ export class Aerodrome {
       data,
       value: isNativeEth(quote.tokenIn) ? quote.amountInAtomic : BigNumber.from(0),
     };
-    const gasEstimate = await this.provider.estimateGas(transaction);
+    const gasEstimate =
+      approval === undefined ? await this.provider.estimateGas(transaction) : DEFAULT_GAS;
     return {
       quote,
       ...(approval === undefined ? {} : { approval }),
