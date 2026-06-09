@@ -29,8 +29,8 @@
 - [x] Define MVP chain as Base mainnet only.
 - [x] Define MVP token scope as ERC-20/WETH only.
 - [x] Decide whether `cowdao-cowpy` is acceptable as a dependency for the MVP adapter, with caveats documented.
-- [ ] Review `cowdao-cowpy` license compatibility.
-- [ ] Review `cowdao-cowpy` package provenance, maintained versions, pinned version ranges, transitive dependencies, vulnerability scan results, and fallback plan if it is unsuitable.
+- [x] Review `cowdao-cowpy` license compatibility.
+- [x] Review `cowdao-cowpy` package provenance, maintained versions, pinned version ranges, transitive dependencies, vulnerability scan results, and fallback plan if it is unsuitable.
 - [x] Add Python package structure for the CoW Swap connector.
 - [x] Add connector configuration for supported chain IDs.
 - [x] Add API environment configuration for production and staging.
