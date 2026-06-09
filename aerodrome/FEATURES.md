@@ -1,4 +1,4 @@
-# Aerodrome Connector Checklist
+# Aerodrome Connector Features
 
 ## MVP: Swap-Only Gateway Connector
 

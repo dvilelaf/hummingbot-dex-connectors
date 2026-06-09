@@ -1,4 +1,4 @@
-# CoW Swap Connector Checklist
+# CoW Swap Connector Features
 
 ## MVP: Python Hummingbot Connector
 
