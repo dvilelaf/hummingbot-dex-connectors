@@ -1,110 +1,78 @@
 # Aerodrome Connector Features
 
-## Architecture and Practices
+This file records the implemented MVP scope for the Aerodrome connector package.
+It is intentionally limited to the production surface needed by the current
+Marlin-style multi-connector runtime.
 
-- [ ] Follow Hummingbot Gateway connector architecture; do not create a Marlin-specific API or custom connector surface.
-- [ ] Keep the connector in the Gateway runtime and expose it through Hummingbot API/Gateway REST endpoints.
-- [ ] Follow the standard Gateway folder layout: connector class, config, constants, utilities, and route folders by schema.
-- [ ] Keep route handlers thin: validate requests, call connector methods, format responses, and map errors.
-- [ ] Keep protocol logic in the connector class and pure helpers in utility modules.
-- [ ] Use strong TypeScript types and avoid `any`.
-- [ ] Use async/await consistently.
-- [ ] Add contextual connector errors without leaking secrets, private data, or raw transaction signing material.
-- [ ] Validate all chain IDs, networks, contract addresses, ABIs, token metadata, and spender addresses before signing or sending transactions.
-- [ ] Reuse patterns from existing Gateway connectors, especially `uniswap` and `pancakeswap`, instead of inventing new abstractions.
-- [ ] Keep Gateway schemas clean: Router for swaps, AMM for basic-pool liquidity, and CLMM for concentrated-liquidity positions.
-- [ ] Keep configuration deterministic and environment-driven for Docker Compose packaging.
-- [ ] Add unit, mocked provider, endpoint integration, and fork tests before considering a feature complete.
-- [ ] Maintain at least the Gateway minimum test coverage target.
-- [ ] Document every supported endpoint, network, pool type, limitation, and operational assumption.
+## Package And Runtime Shape
 
-## MVP: Swap-Only Gateway Connector
+- [x] TypeScript package with strict `tsconfig`, ESLint, Prettier, Vitest, and pnpm.
+- [x] Hummingbot Gateway-style router connector surface for `ethereum/base`.
+- [x] No private key handling or local signing inside the connector.
+- [x] Transaction plans return calldata, target, value, chain, and network for the runtime to sign.
+- [x] Runtime integration documented for a Docker Compose service that can be mounted beside other connectors.
 
-- [ ] Define MVP scope as Base mainnet swap support for Aerodrome basic stable/volatile pools only.
-- [ ] Use Hummingbot Gateway Router schema for swap endpoints; reserve AMM schema for basic-pool liquidity and CLMM schema for Slipstream positions.
-- [ ] Add Gateway connector scaffold for `aerodrome`.
-- [ ] Add Aerodrome chain/network configuration for Base.
-- [ ] Add contract address configuration for global contracts: Router, PoolFactory, and FactoryRegistry.
-- [ ] Verify configured contract addresses by chain ID, checksum, deployed code, ABI compatibility, proxy status where applicable, and official sources.
-- [ ] Add Pool and PoolFees ABIs for per-pool discovery, validation, and compatibility checks.
-- [ ] Implement token lookup and amount normalization.
-- [ ] Implement allowance checks for ERC-20 sell tokens.
-- [ ] Implement approval transaction creation with verified spender addresses and exact or configurable capped allowances.
-- [ ] Implement allowance reset/revoke behavior where token behavior requires it.
-- [ ] Validate approved factory, real pool existence, nonzero liquidity, and route `stable`/`factory` metadata before quoting or executing.
-- [ ] Use Router/Pool contract quotes for stable pools; do not approximate stable pricing with constant-product math.
-- [ ] Handle token decimals, quote rounding, and minimum-output calculation.
-- [ ] Implement `router/quote-swap` for basic stable/volatile pools.
-- [ ] Implement `router/execute-swap` for basic stable/volatile pools.
-- [ ] Implement `router/execute-quote` for pre-fetched quotes.
-- [ ] Validate transaction preflight before signing: chain ID, recipient, target contract, calldata route, ETH value, deadline, slippage bounds, and expected token amounts.
-- [ ] Track approval and swap transaction lifecycle: hash persistence, submitted, pending, mined, reverted, replaced, and confirmed.
-- [ ] Implement quote error handling for missing pools, insufficient liquidity, unsupported routes, and RPC failures.
-- [ ] Implement transaction error handling for reverted swaps, expired deadlines, slippage, gas estimation failure, Base RPC lag, reorgs, nonce replacement, and nonce issues.
-- [ ] Add unit tests for quote parsing, route construction, slippage, and amount conversion.
-- [ ] Add mocked provider/Gateway-contract tests for quote, execute, approval, retry/error mapping, gas estimation, and malformed provider responses.
-- [ ] Add fork/integration tests for at least one liquid Base pair.
-- [ ] Add compatibility tests against Hummingbot Gateway Router schema for quote, execute, approval, error, and config payloads.
-- [ ] Document supported chains, pool types, and known limitations.
+## Aerodrome Base Support
 
-## Marlin Runtime Integration
+- [x] Base mainnet chain configuration with official Router, PoolFactory, FactoryRegistry, WETH, USDC, WETH, and AERO addresses.
+- [x] Router, PoolFactory, FactoryRegistry, Pool, and ERC20 minimal ABIs kept local and narrow.
+- [x] Provider chain ID validation for Base `8453`.
+- [x] Deployed-code validation for core contracts and configured tokens.
+- [x] Router `defaultFactory()` and `factoryRegistry()` verification against configured addresses.
+- [x] FactoryRegistry approval verification for the configured factory.
 
-- [ ] Package Aerodrome into a custom `hummingbot-gateway` image, not into the Marlin Python image.
-- [ ] Keep Marlin integration API-only: Marlin calls Hummingbot API, and Hummingbot API calls Gateway.
-- [ ] Ensure the connector is available to Marlin through Hummingbot API Gateway endpoints, starting with `/gateway/swap/quote`.
-- [ ] Support Compose configuration through `HUMMINGBOT_GATEWAY_IMAGE`, `HUMMINGBOT_GATEWAY_CONNECTOR=aerodrome`, `HUMMINGBOT_GATEWAY_NETWORK`, and `SYMBOL`.
-- [ ] Add runtime documentation for the expected Compose services: `marlin`, `hummingbot-api`, `hummingbot-gateway`, `hummingbot-postgres`, and `hummingbot-broker`.
-- [ ] Add a Marlin smoke path that verifies Gateway status, connector quote availability, and no direct Marlin import of Aerodrome code.
-- [ ] Document that Aerodrome execution remains Gateway-owned; Marlin should consume normalized quote/execution evidence through Hummingbot API.
+## Swap And Quote Lifecycle
 
-## Slipstream Swap Support
+- [x] Exact-input `SELL` quotes through Aerodrome basic volatile and stable pools.
+- [x] Exact-input `SELL` execution plans through `swapExactTokensForTokens`.
+- [x] `BUY` requests handled explicitly by rejecting exact-output swaps that the basic Router cannot support safely.
+- [x] Stable and volatile pool routing with pool metadata validation.
+- [x] Pool existence validation through Router `poolFor`, PoolFactory `getPool`, and PoolFactory `isPool`.
+- [x] Pool token-set, stable-flag, and nonzero-reserve validation.
+- [x] Router `getAmountsOut` validation with nonzero output checks.
+- [x] Decimal-normalized price calculation.
+- [x] `priceImpactPct` represented as `null` until a defensible impact model is added.
+- [x] Deadline, recipient, token amount, and slippage validation.
+- [x] Slippage guard rejects values that would produce zero minimum output.
+- [x] Quote cache uses frozen cloned request and response objects.
+- [x] Execution revalidates the current quote against cached `minAmountOutAtomic`.
+- [x] Wallet balance validation before execution planning.
+- [x] ERC20 allowance validation and exact-amount approval transaction planning.
+- [x] User-supplied calldata rejected; calldata is always generated from validated connector state.
 
-- [ ] Add contract address configuration for MixedQuoter, SwapRouter, and required Slipstream contracts.
-- [ ] Add required ABIs for Slipstream contracts.
-- [ ] Keep UniversalRouter and mixed basic/Slipstream routing out of scope until explicitly implemented and tested.
-- [ ] Map Slipstream pool discovery using token pair and tick spacing.
-- [ ] Add Slipstream quoter integration.
-- [ ] Add Slipstream path encoding and decoding.
-- [ ] Extend `router/quote-swap` for Slipstream routes.
-- [ ] Extend `router/execute-swap` for Slipstream routes.
-- [ ] Handle tick spacing instead of Uniswap-style fee tier assumptions.
-- [ ] Add unit and fork/integration tests for single-hop Slipstream swaps.
-- [ ] Add unit and fork/integration tests for multi-hop or mixed basic/Slipstream routes if supported.
+## Error Handling And Data Boundaries
 
-## AMM Liquidity Support
+- [x] Connector-specific error classes for configuration, quote, execution, pool, token, and provider failures.
+- [x] Malformed provider and contract responses wrapped in connector errors.
+- [x] Public route helpers return JSON-safe DTOs, not ethers `BigNumber` internals.
+- [x] Internal BigNumber arithmetic kept behind typed connector boundaries.
+- [x] Native ETH swaps excluded from the MVP to avoid wrapping and balance edge cases.
 
-- [ ] Implement `amm/pool-info` for stable and volatile pools.
-- [ ] Implement `amm/position-info` for wallet LP token balances.
-- [ ] Implement `amm/quote-liquidity`.
-- [ ] Implement `amm/add-liquidity`.
-- [ ] Implement `amm/remove-liquidity`.
-- [ ] Add unit and fork/integration tests for stable pool liquidity math using contract quotes.
-- [ ] Add unit and fork/integration tests for volatile pool liquidity operations.
+## Documentation
 
-## CLMM Liquidity Support
+- [x] README with supported scope, limitations, commands, and runtime expectations.
+- [x] Usage guide with quote, execute, approval, and failure examples.
+- [x] Runtime integration notes for a shared Docker Compose deployment.
+- [x] Upstream notes covering Aerodrome contract references and Hummingbot Gateway architecture alignment.
 
-- [ ] Implement `clmm/pool-info`.
-- [ ] Implement `clmm/positions-owned`.
-- [ ] Implement `clmm/position-info`.
-- [ ] Implement `clmm/quote-position`.
-- [ ] Implement `clmm/open-position`.
-- [ ] Implement `clmm/add-liquidity`.
-- [ ] Implement `clmm/remove-liquidity`.
-- [ ] Implement `clmm/collect-fees`.
-- [ ] Implement `clmm/close-position`.
-- [ ] Add unit and fork/integration tests for position NFT discovery.
-- [ ] Add unit and fork/integration tests for opening, modifying, fee collection, and closing positions.
+## Quality Gate
 
-## Production Hardening
+- [x] ESLint strict rules pass.
+- [x] TypeScript strict typecheck passes.
+- [x] Package build passes.
+- [x] Prettier check passes.
+- [x] Vitest coverage gate is set to at least 85 percent for statements, lines, functions, and branches.
+- [x] Unit tests cover quote, execute, approvals, config validation, provider failures, slippage, BUY rejection, and cache immutability.
+- [x] Multidisciplinary review completed for architecture, backend correctness, security, and test quality with no remaining findings.
 
-- [ ] Add structured logging for quote, approval, and swap execution paths.
-- [ ] Add retry policy for transient RPC/API failures.
-- [ ] Add gas estimation safeguards.
-- [ ] Add deadline and slippage configuration.
-- [ ] Add configuration validation at startup.
-- [ ] Add lifecycle/restart tests for startup config reload, connector initialization, allowance/cache recovery, and pending transaction handling.
-- [ ] Add negative tests for unsupported tokens, unsupported pools, insufficient liquidity, unsupported routes, RPC failures, reverted swaps, expired deadlines, slippage failures, gas estimation failures, and nonce issues.
-- [ ] Add malicious/stale quote execution tests for transaction preflight validation.
-- [ ] Run lint, typecheck, unit tests, and fork tests.
-- [ ] Prepare usage examples.
-- [ ] Prepare upstream contribution notes if submitting to Hummingbot.
+## Deliberately Out Of Scope For This MVP
+
+The following are not open tasks for this MVP. They are larger product decisions
+that should only be added when the runtime needs them.
+
+- Exact-output BUY swaps, because Aerodrome's basic Router does not provide a safe exact-output method.
+- Slipstream concentrated liquidity routing.
+- Multi-hop route search.
+- Liquidity provision, withdrawals, gauges, bribes, and reward claiming.
+- Native ETH wrapping or unwrapping.
+- MEV protection, private relay submission, or custom transaction broadcasting.

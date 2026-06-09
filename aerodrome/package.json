@@ -1,0 +1,39 @@
+{
+  "name": "hummingbot-aerodrome-gateway-connector",
+  "version": "0.1.0",
+  "description": "Aerodrome Gateway-style router connector for Base stable and volatile swaps.",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "lint": "eslint src tests",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run format:check && pnpm run test:cov"
+  },
+  "dependencies": {
+    "@ethersproject/abi": "5.8.0",
+    "@ethersproject/address": "5.8.0",
+    "@ethersproject/bignumber": "5.8.0",
+    "@ethersproject/contracts": "5.8.0",
+    "@ethersproject/providers": "5.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.9"
+  }
+}
