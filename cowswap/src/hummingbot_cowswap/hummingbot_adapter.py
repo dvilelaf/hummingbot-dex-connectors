@@ -311,6 +311,12 @@ class HummingbotCoWAdapter:
         )
         return tracked
 
+    async def poll(self, client_order_id: str) -> object:
+        """Poll an in-flight order and record the Hummingbot-style update."""
+        tracked = await self._connector.poll_order(client_order_id)
+        self.record_order_update(tracked)
+        return tracked
+
     def record_order_update(self, order: object) -> HummingbotOrderEvent:
         """Track an order update and emit the matching Hummingbot-style event."""
         client_order_id = _order_client_order_id(order)
