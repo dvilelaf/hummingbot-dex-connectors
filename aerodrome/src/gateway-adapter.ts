@@ -19,7 +19,7 @@ export interface AerodromeGatewayQuoteRequest {
   readonly slippagePct?: number;
   readonly walletAddress?: string;
   readonly poolType?: PoolType;
-  readonly maxHops?: 1 | 2;
+  readonly maxHops?: 1 | 2 | '1' | '2';
 }
 
 export interface AerodromeGatewayExecuteSwapRequest extends AerodromeGatewayQuoteRequest {
@@ -127,7 +127,7 @@ async function gatewayQuoteRequestToAerodromeRequest(
   return {
     amount: String(request.amount),
     baseToken: await resolveToken(request.baseToken),
-    ...(request.maxHops === undefined ? {} : { maxHops: request.maxHops }),
+    maxHops: gatewayMaxHops(request.maxHops),
     poolType: request.poolType ?? 'volatile',
     quoteToken: await resolveToken(request.quoteToken),
     side: request.side,
@@ -136,6 +136,19 @@ async function gatewayQuoteRequestToAerodromeRequest(
       ? {}
       : { walletAddress: request.walletAddress }),
   };
+}
+
+function gatewayMaxHops(maxHops: AerodromeGatewayQuoteRequest['maxHops']): 1 | 2 {
+  if (maxHops === undefined) {
+    return 1;
+  }
+  if (maxHops === 1 || maxHops === '1') {
+    return 1;
+  }
+  if (maxHops === 2 || maxHops === '2') {
+    return 2;
+  }
+  throw new Error('Aerodrome maxHops must be 1 or 2');
 }
 
 function quoteToGatewayResponse(

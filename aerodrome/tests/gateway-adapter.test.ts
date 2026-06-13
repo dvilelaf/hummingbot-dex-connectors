@@ -30,6 +30,7 @@ describe('Aerodrome Gateway adapter', () => {
         expect(request).toMatchObject({
           amount: '1.5',
           baseToken: weth,
+          maxHops: 1,
           poolType: 'stable',
           quoteToken: usdc,
           side: 'SELL',
@@ -69,6 +70,27 @@ describe('Aerodrome Gateway adapter', () => {
       tokenIn: weth.address,
       tokenOut: usdc.address,
     });
+  });
+
+  it('coerces Gateway maxHops query values', async () => {
+    const connector = {
+      quoteSwap: async (request: any): Promise<AerodromeQuote> => {
+        expect(request.maxHops).toBe(2);
+        return quote();
+      },
+    };
+
+    await quoteAerodromeForGateway(
+      connector as any,
+      {
+        amount: 1,
+        baseToken: 'WETH',
+        maxHops: '2',
+        quoteToken: 'USDC',
+        side: 'SELL',
+      },
+      resolveToken,
+    );
   });
 
   it('rejects BUY because Aerodrome exact-output swaps are not implemented', async () => {
