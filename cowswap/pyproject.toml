@@ -53,6 +53,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/hummingbot_cowswap/client.py" = [
     "PLC0415", # cowdao-cowpy has package import side effects; submodules are imported lazily.
+    "SLF001", # cowdao-cowpy exposes raw trades only through its generated private fetch helper.
 ]
 "src/hummingbot_cowswap/connector.py" = [
     "PLR0913", # Constructor keeps runtime/test dependencies explicit.

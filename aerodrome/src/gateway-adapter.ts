@@ -99,9 +99,7 @@ export async function executeAerodromeGatewaySwapPlan(
   const transactions: AerodromeGatewayExecutedTransaction[] = [];
 
   if (plan.approval !== undefined) {
-    transactions.push(
-      await executePlannedTransaction('approval', plan.approval, executor),
-    );
+    transactions.push(await executePlannedTransaction('approval', plan.approval, executor));
     const lastTransaction = transactions[transactions.length - 1];
     if (lastTransaction !== undefined && isFailedStatus(lastTransaction.status)) {
       return swapExecutionResponse(transactions);
@@ -132,9 +130,7 @@ async function gatewayQuoteRequestToAerodromeRequest(
     quoteToken: await resolveToken(request.quoteToken),
     side: request.side,
     ...(slippageBps === undefined ? {} : { slippageBps }),
-    ...(request.walletAddress === undefined
-      ? {}
-      : { walletAddress: request.walletAddress }),
+    ...(request.walletAddress === undefined ? {} : { walletAddress: request.walletAddress }),
   };
 }
 

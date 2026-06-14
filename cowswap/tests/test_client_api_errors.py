@@ -150,7 +150,13 @@ class RateLimitedQuoteApi:
 class TradeWithNewFeePolicyApi:
     """Fake cowpy API returning a real trade shape with newer fee policies."""
 
-    async def _fetch(self, *, path: str, params: dict[str, object], response_model: object) -> object:
+    async def _fetch(
+        self,
+        *,
+        path: str,
+        params: dict[str, object],
+        response_model: object,
+    ) -> object:
         """Return raw trades with fields that generated cowpy models reject."""
         assert path == "/api/v1/trades"
         assert params == {"orderUid": "0xorder"}

@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   executeAerodromeGatewaySwapPlan,
+  type GatewayTransactionBroadcastResponse,
   planAerodromeGatewaySwap,
   quoteAerodromeForGateway,
 } from '../src/gateway-adapter.js';
+import type { Aerodrome } from '../src/aerodrome.js';
 import type {
   AerodromeExecutionPlan,
   AerodromeQuote,
+  ExecuteSwapRequest,
+  PlannedTransaction,
+  QuoteSwapRequest,
   TokenInfo,
 } from '../src/types.js';
 
@@ -25,8 +30,9 @@ const usdc: TokenInfo = {
 
 describe('Aerodrome Gateway adapter', () => {
   it('maps Gateway quote requests to Aerodrome requests and normalizes response', async () => {
-    const connector = {
-      quoteSwap: async (request: any): Promise<AerodromeQuote> => {
+    const connector = fakeAerodrome({
+      quoteSwap: async (request: QuoteSwapRequest): Promise<AerodromeQuote> => {
+        await Promise.resolve();
         expect(request).toMatchObject({
           amount: '1.5',
           baseToken: weth,
@@ -39,10 +45,10 @@ describe('Aerodrome Gateway adapter', () => {
         });
         return quote();
       },
-    };
+    });
 
     const response = await quoteAerodromeForGateway(
-      connector as any,
+      connector,
       {
         amount: 1.5,
         baseToken: 'WETH',
@@ -73,15 +79,16 @@ describe('Aerodrome Gateway adapter', () => {
   });
 
   it('coerces Gateway maxHops query values', async () => {
-    const connector = {
-      quoteSwap: async (request: any): Promise<AerodromeQuote> => {
+    const connector = fakeAerodrome({
+      quoteSwap: async (request: QuoteSwapRequest): Promise<AerodromeQuote> => {
+        await Promise.resolve();
         expect(request.maxHops).toBe(2);
         return quote();
       },
-    };
+    });
 
     await quoteAerodromeForGateway(
-      connector as any,
+      connector,
       {
         amount: 1,
         baseToken: 'WETH',
@@ -96,7 +103,12 @@ describe('Aerodrome Gateway adapter', () => {
   it('rejects BUY because Aerodrome exact-output swaps are not implemented', async () => {
     await expect(
       quoteAerodromeForGateway(
-        { quoteSwap: async () => quote() } as any,
+        fakeAerodrome({
+          quoteSwap: async (): Promise<AerodromeQuote> => {
+            await Promise.resolve();
+            return quote();
+          },
+        }),
         {
           amount: 1,
           baseToken: 'WETH',
@@ -109,15 +121,16 @@ describe('Aerodrome Gateway adapter', () => {
   });
 
   it('plans execution through Aerodrome without sending transactions itself', async () => {
-    const connector = {
-      executeSwap: async (request: any): Promise<AerodromeExecutionPlan> => {
+    const connector = fakeAerodrome({
+      executeSwap: async (request: ExecuteSwapRequest): Promise<AerodromeExecutionPlan> => {
+        await Promise.resolve();
         expect(request.walletAddress).toBe('0x1111111111111111111111111111111111111111');
         return executionPlan();
       },
-    };
+    });
 
     const plan = await planAerodromeGatewaySwap(
-      connector as any,
+      connector,
       {
         amount: 1,
         baseToken: 'WETH',
@@ -134,7 +147,10 @@ describe('Aerodrome Gateway adapter', () => {
   it('executes approval then swap through injected Gateway executor', async () => {
     const seen: string[] = [];
     const result = await executeAerodromeGatewaySwapPlan(executionPlan(), {
-      executeTransaction: async (transaction) => {
+      executeTransaction: async (
+        transaction: PlannedTransaction,
+      ): Promise<GatewayTransactionBroadcastResponse> => {
+        await Promise.resolve();
         seen.push(transaction.to);
         return { status: 'CONFIRMED', txHash: `tx-${seen.length}` };
       },
@@ -157,11 +173,20 @@ describe('Aerodrome Gateway adapter', () => {
   it('rejects execution responses without transaction evidence', async () => {
     await expect(
       executeAerodromeGatewaySwapPlan(executionPlan(), {
-        executeTransaction: async () => ({ status: 'SUBMITTED' }),
+        executeTransaction: async (): Promise<GatewayTransactionBroadcastResponse> => {
+          await Promise.resolve();
+          return { status: 'SUBMITTED' };
+        },
       }),
     ).rejects.toThrow('returned no hash');
   });
 });
+
+function fakeAerodrome(
+  overrides: Partial<Pick<Aerodrome, 'executeSwap' | 'quoteSwap'>>,
+): Aerodrome {
+  return overrides as Aerodrome;
+}
 
 function resolveToken(symbol: string): TokenInfo {
   if (symbol === 'WETH') {
