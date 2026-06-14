@@ -147,6 +147,52 @@ class RateLimitedQuoteApi:
         raise ApiResponseError(message, "TooManyRequests", {"status": 429})
 
 
+class TradeWithNewFeePolicyApi:
+    """Fake cowpy API returning a real trade shape with newer fee policies."""
+
+    async def _fetch(self, *, path: str, params: dict[str, object], response_model: object) -> object:
+        """Return raw trades with fields that generated cowpy models reject."""
+        assert path == "/api/v1/trades"
+        assert params == {"orderUid": "0xorder"}
+        assert response_model is None
+        return [
+            {
+                "blockNumber": 11055675,
+                "logIndex": 473,
+                "orderUid": "0xorder",
+                "buyAmount": "50000000000000",
+                "sellAmount": "172104742501883",
+                "sellAmountBeforeFees": "172104742501883",
+                "owner": "0x043f9e880763576c15ebcb7d4f0d7453f2db1708",
+                "buyToken": "0xfff9976782d46cc05630d1f6ebab18b2324d6b14",
+                "sellToken": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+                "txHash": "0xda4dbd26f7e717ed43baaf9ee5ef6f488c9f6ba50292dec82bd92d51815e6d53",
+                "executedProtocolFees": [
+                    {
+                        "policy": {
+                            "priceImprovement": {
+                                "factor": 0.5,
+                                "maxVolumeFactor": 0.0098,
+                                "quote": {
+                                    "sellAmount": "1507097374895",
+                                    "buyAmount": "50000000000000",
+                                    "fee": "204680291879881",
+                                },
+                            },
+                        },
+                        "amount": "1669923963829",
+                        "token": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+                    },
+                    {
+                        "policy": {"volume": {"factor": 0.0002}},
+                        "amount": "34414065687",
+                        "token": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+                    },
+                ],
+            },
+        ]
+
+
 @pytest.mark.asyncio
 async def test_quote_sell_wraps_timeout_as_transient_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Quote timeouts surface as connector-controlled transient errors."""
@@ -248,3 +294,19 @@ async def test_quote_sell_wraps_rate_limit_after_retries(monkeypatch: pytest.Mon
         await client.quote_sell(quote_request())
 
     assert api.calls == 3
+
+
+@pytest.mark.asyncio
+async def test_get_trades_accepts_new_protocol_fee_policy_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Trade polling must not fail when CoW adds fee policy variants."""
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+    monkeypatch.setattr(client, "_api", TradeWithNewFeePolicyApi())
+
+    trades = await client.get_trades("0xorder")
+
+    assert len(trades) == 1
+    trade = trades[0]
+    assert trade["txHash"] == "0xda4dbd26f7e717ed43baaf9ee5ef6f488c9f6ba50292dec82bd92d51815e6d53"
+    assert trade["buyAmount"] == "50000000000000"
