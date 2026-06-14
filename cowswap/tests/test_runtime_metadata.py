@@ -25,6 +25,7 @@ def test_connector_metadata_serializes_hummingbot_api_surface() -> None:
         {"chain_id": 8453, "chain_name": "base"},
         {"chain_id": 42161, "chain_name": "arbitrum"},
         {"chain_id": 43114, "chain_name": "avalanche"},
+        {"chain_id": 11155111, "chain_name": "sepolia"},
     ]
 
 

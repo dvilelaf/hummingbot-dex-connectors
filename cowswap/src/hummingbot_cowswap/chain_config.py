@@ -29,6 +29,7 @@ SUPPORTED_CHAINS = {
     42161: ("arbitrum", "arbitrum_one"),
     43114: ("avalanche", "avalanche"),
     56: ("bnb", "bnb"),
+    11155111: ("sepolia", "sepolia"),
 }
 SUPPORTED_CHAIN_IDS = tuple(SUPPORTED_CHAINS)
 OFFICIAL_ADDRESS_SOURCE = "https://cowprotocol-cow-sdk.mintlify.app/api/config"
@@ -54,6 +55,8 @@ SETTLEMENT_RUNTIME_HASHES = {
     (43114, "staging"): "0x864cc1450450e7ecb079c24aa168015279895908ca7cd02834d02d5d9d87c2b9",
     (56, "prod"): "0x681b39b3355153c3f8ff25d44d73abeca42b51e499d9c54d7354121405a004c4",
     (56, "staging"): "0x4be734a4feee4d8bf57b59e540101d18e1e9449fc8cafe57fb5288aee29079e6",
+    (11155111, "prod"): "0x9fbace363dc778e25fecb202c12981d916faea80c9aab8167aeeedcaed84df53",
+    (11155111, "staging"): "0x2bd5287a0e8ee6859ac371fac032caf3e193c8785a476913bc017325f83ac2aa",
 }
 VAULT_RELAYER_RUNTIME_HASH = "0x500097799c1379a3728ed70b17de4132de2c07f6937b041c361deaade22b6a5e"
 SETTLEMENT_ABI_SELECTORS = (

@@ -41,6 +41,7 @@ def test_base_staging_chain_config_uses_barn_endpoint_and_staging_domain() -> No
         (42161, "arbitrum", "arbitrum_one"),
         (43114, "avalanche", "avalanche"),
         (56, "bnb", "bnb"),
+        (11155111, "sepolia", "sepolia"),
     ],
 )
 def test_supported_prod_chain_configs_use_verified_core_addresses(
