@@ -230,11 +230,15 @@ class CowDaoOrderBookClient:
     async def get_trades(self, order_uid: str) -> list[object]:
         """Fetch cowdao-cowpy trade models for a CoW order UID."""
         ensure_cowpy_submodule_imports()
-        from cowdao_cowpy.order_book.generated.model import UID
+        from cowdao_cowpy.order_book.generated.model import UID, Trade
 
         return await _call_order_book(
             "get_trades",
-            lambda: self._order_book_api().get_trades_by_order_uid(UID(order_uid)),
+            lambda: self._order_book_api()._fetch(
+                path="/api/v1/trades",
+                params={"orderUid": order_uid},
+                response_model=list[Trade],
+            ),
             timeout_seconds=self._timeout_seconds,
             max_attempts=self._max_attempts,
             retry_delay_seconds=self._retry_delay_seconds,

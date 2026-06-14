@@ -496,8 +496,8 @@ def _order_status_values(order: object) -> tuple[str, str, str]:
         status = cast("Any", status).value
     return (
         str(status),
-        str(_field(order, "executedSellAmount", "0")),
-        str(_field(order, "executedBuyAmount", "0")),
+        _root(_field(order, "executedSellAmount", "0")),
+        _root(_field(order, "executedBuyAmount", "0")),
     )
 
 
