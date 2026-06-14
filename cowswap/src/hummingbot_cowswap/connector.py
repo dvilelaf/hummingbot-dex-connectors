@@ -142,8 +142,8 @@ class CoWConnector:
         )
         _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
-        fee_amount = _quote_fee_amount(quote)
-        order_sell_amount = _quote_sell_amount_with_fee(quote)
+        fee_amount = _order_fee_amount(self.config, quote)
+        order_sell_amount = _order_sell_amount(self.config, quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -217,7 +217,7 @@ class CoWConnector:
         )
         _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
-        fee_amount = _quote_fee_amount(quote)
+        fee_amount = _order_fee_amount(self.config, quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -462,6 +462,12 @@ def _quote_sell_amount_with_fee(quote: object) -> str:
     return str(int(_quote_sell_amount(quote)) + int(_quote_fee_amount(quote)))
 
 
+def _order_sell_amount(config: CoWConfig, quote: object) -> str:
+    if config.env.lower() == "staging":
+        return _quote_sell_amount(quote)
+    return _quote_sell_amount_with_fee(quote)
+
+
 def _quote_sell_amount(quote: object) -> str:
     return _root(_field(_field(quote, "quote"), "sellAmount"))
 
@@ -472,6 +478,12 @@ def _quote_buy_amount(quote: object) -> str:
 
 def _quote_fee_amount(quote: object) -> str:
     return _root(_field(_field(quote, "quote"), "feeAmount"))
+
+
+def _order_fee_amount(config: CoWConfig, quote: object) -> str:
+    if config.env.lower() == "staging":
+        return "0"
+    return _quote_fee_amount(quote)
 
 
 def _quote_valid_to(quote: object) -> int:

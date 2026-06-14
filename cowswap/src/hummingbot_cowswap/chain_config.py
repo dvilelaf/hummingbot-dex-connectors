@@ -20,6 +20,9 @@ PROD_SETTLEMENT_CONTRACT = "0x9008D19f58AAbD9eD0D60971565AA8510560ab41"
 STAGING_SETTLEMENT_CONTRACT = "0xf553d092b50bdcbddeD1A99aF2cA29FBE5E2CB13"
 PROD_VAULT_RELAYER = "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"
 STAGING_VAULT_RELAYER = PROD_VAULT_RELAYER
+STAGING_VAULT_RELAYER_BY_CHAIN = {
+    11155111: "0xC7242d167563352E2BCA4d71C043fbe542DB8FB2",
+}
 BASE_CHAIN_ID = 8453
 SUPPORTED_CHAINS = {
     1: ("ethereum", "mainnet"),
@@ -124,7 +127,11 @@ def chain_config(chain_id: int, env: str) -> ChainConfig:
         env=normalized_env,
         order_book_url=f"{api_host}/{api_slug}",
         settlement_contract=STAGING_SETTLEMENT_CONTRACT if is_staging else PROD_SETTLEMENT_CONTRACT,
-        vault_relayer=STAGING_VAULT_RELAYER if is_staging else PROD_VAULT_RELAYER,
+        vault_relayer=(
+            STAGING_VAULT_RELAYER_BY_CHAIN.get(chain_id, STAGING_VAULT_RELAYER)
+            if is_staging
+            else PROD_VAULT_RELAYER
+        ),
     )
 
 
