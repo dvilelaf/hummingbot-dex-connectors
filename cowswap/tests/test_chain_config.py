@@ -28,7 +28,7 @@ def test_base_staging_chain_config_uses_barn_endpoint_and_staging_domain() -> No
 
     assert config.order_book_url == "https://barn.api.cow.fi/base"
     assert config.settlement_contract == "0xf553d092b50bdcbddeD1A99aF2cA29FBE5E2CB13"
-    assert config.vault_relayer == "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110"
+    assert config.vault_relayer == "0xC7242d167563352E2BCA4d71C043fbe542DB8FB2"
 
 
 @pytest.mark.parametrize(
