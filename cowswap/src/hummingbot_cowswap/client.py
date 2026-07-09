@@ -292,69 +292,13 @@ class CowDaoOrderBookClient:
             from cowdao_cowpy.order_book.api import OrderBookApi
             from cowdao_cowpy.order_book.config import OrderBookAPIConfigFactory
 
-            api_config = OrderBookAPIConfigFactory.get_config(
-                self.config.env,
-                SupportedChainId(self.config.chain_id),
+            self._api = OrderBookApi(
+                OrderBookAPIConfigFactory.get_config(
+                    self.config.env,
+                    SupportedChainId(self.config.chain_id),
+                )
             )
-            partner_api_key = _partner_api_key(self.config)
-            if partner_api_key:
-                api_config = _PartnerAPIConfig(api_config)
-            self._api = OrderBookApi(api_config)
-            if partner_api_key:
-                self._api.request_strategy = _PartnerRequestStrategy(partner_api_key)
         return self._api
-
-
-class _PartnerAPIConfig:
-    """API config wrapper that routes authenticated traffic to CoW partner hosts."""
-
-    def __init__(self, base_config: object) -> None:
-        self._base_config = base_config
-        self.chain_id = getattr(base_config, "chain_id", None)
-
-    def get_base_url(self) -> str:
-        base_url = self._base_config.get_base_url()
-        if "barn.api.cow.fi" in base_url:
-            return base_url.replace("barn.api.cow.fi", "partners.barn.cow.fi")
-        return base_url.replace("api.cow.fi", "partners.cow.fi")
-
-    def get_context(self) -> dict[str, object]:
-        context = dict(self._base_config.get_context())
-        context["base_url"] = self.get_base_url()
-        return context
-
-    def with_env(self, env: str) -> _PartnerAPIConfig:
-        return _PartnerAPIConfig(self._base_config.with_env(env))
-
-
-class _PartnerRequestStrategy:
-    """Request strategy that sends CoW Partner API authentication."""
-
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
-
-    async def make_request(
-        self,
-        client: object,
-        url: str,
-        method: str,
-        **request_kwargs: object,
-    ) -> object:
-        headers = dict(request_kwargs.pop("headers", {}) or {})
-        headers.setdefault("accept", "application/json")
-        headers.setdefault("content-type", "application/json")
-        headers["X-API-Key"] = self._api_key
-        return await client.request(url=url, headers=headers, method=method, **request_kwargs)
-
-
-def _partner_api_key(config: object) -> str:
-    value = getattr(config, "partner_api_key", None)
-    if value is None:
-        return ""
-    get_secret_value = getattr(value, "get_secret_value", None)
-    if callable(get_secret_value):
-        return str(get_secret_value()).strip()
-    return str(value).strip()
 
 
 async def _call_order_book(
