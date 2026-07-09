@@ -367,6 +367,8 @@ def _map_order_book_error(operation: str, exc: Exception) -> CoWOrderBookAPIErro
         message = f"transient CoW Order Book API failure during {operation}: {exc}"
         return CoWOrderBookTransientError(message)
     if isinstance(exc, UnexpectedResponseError):
+        if _is_rate_limit(exc):
+            return _rate_limit_error(operation, exc)
         if _looks_like_timeout(exc):
             message = f"transient CoW Order Book API failure during {operation}: {exc}"
             return CoWOrderBookTransientError(message)
@@ -377,13 +379,7 @@ def _map_order_book_error(operation: str, exc: Exception) -> CoWOrderBookAPIErro
         raise CoWOrderBookMalformedResponseError(message) from exc
     if isinstance(exc, ApiResponseError):
         if _is_rate_limit(exc):
-            message = f"rate-limited by CoW Order Book API during {operation}: {exc}"
-            retry_after_seconds = _retry_after_seconds(exc)
-            if retry_after_seconds is not None:
-                message = f"{message}; retry after {retry_after_seconds}s"
-            else:
-                message = f"{message}; retry after provider cooldown"
-            return CoWOrderBookRateLimitError(message)
+            return _rate_limit_error(operation, exc)
         if _is_server_error(exc):
             message = f"transient CoW Order Book API failure during {operation}: {exc}"
             return CoWOrderBookTransientError(message)
@@ -397,6 +393,17 @@ def _looks_like_timeout(exc: Exception) -> bool:
     """Return whether cowpy wrapped a timeout as an unexpected response."""
     message = str(exc).lower()
     return "timeout" in message or "timed out" in message
+
+
+def _rate_limit_error(operation: str, exc: Exception) -> CoWOrderBookRateLimitError:
+    """Build a clear non-retryable rate-limit error."""
+    message = f"rate-limited by CoW Order Book API during {operation}: {exc}"
+    retry_after_seconds = _retry_after_seconds(exc)
+    if retry_after_seconds is not None:
+        message = f"{message}; retry after {retry_after_seconds}s"
+    else:
+        message = f"{message}; retry after provider cooldown"
+    return CoWOrderBookRateLimitError(message)
 
 
 def _is_rate_limit(exc: Exception) -> bool:

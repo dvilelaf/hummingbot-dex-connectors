@@ -151,6 +151,22 @@ class RateLimitedQuoteApi:
         )
 
 
+class RateLimitedUnexpectedQuoteApi:
+    """Fake cowpy API that wraps a 429 as an unexpected response."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def post_quote(self, *_args: object) -> NoReturn:
+        """Raise the 429 shape observed from cowpy's generic wrapper."""
+        self.calls += 1
+        ensure_cowpy_submodule_imports()
+        from cowdao_cowpy.common.api.errors import UnexpectedResponseError
+
+        message = 'An unexpected error occurred: HTTP error 429: {"error": "too many requests"}'
+        raise UnexpectedResponseError(message)
+
+
 class TradeWithNewFeePolicyApi:
     """Fake cowpy API returning a real trade shape with newer fee policies."""
 
@@ -301,6 +317,21 @@ async def test_quote_sell_wraps_rate_limit_after_retries(monkeypatch: pytest.Mon
     monkeypatch.setattr(client, "_api", api)
 
     with pytest.raises(CoWOrderBookRateLimitError, match=r"quote_sell.*retry after 17s"):
+        await client.quote_sell(quote_request())
+
+    assert api.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_quote_sell_maps_unexpected_response_429_as_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cowpy may wrap 429s as UnexpectedResponseError; still fail as rate-limit."""
+    api = RateLimitedUnexpectedQuoteApi()
+    client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
+    monkeypatch.setattr(client, "_api", api)
+
+    with pytest.raises(CoWOrderBookRateLimitError, match=r"quote_sell.*provider cooldown"):
         await client.quote_sell(quote_request())
 
     assert api.calls == 1
