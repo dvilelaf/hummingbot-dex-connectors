@@ -144,7 +144,11 @@ class RateLimitedQuoteApi:
         from cowdao_cowpy.common.api.errors import ApiResponseError
 
         message = "rate limit exceeded"
-        raise ApiResponseError(message, "TooManyRequests", {"status": 429})
+        raise ApiResponseError(
+            message,
+            "TooManyRequests",
+            {"status": 429, "headers": {"Retry-After": "17"}},
+        )
 
 
 class TradeWithNewFeePolicyApi:
@@ -296,10 +300,10 @@ async def test_quote_sell_wraps_rate_limit_after_retries(monkeypatch: pytest.Mon
     client = CowDaoOrderBookClient(config(), retry_delay_seconds=0)
     monkeypatch.setattr(client, "_api", api)
 
-    with pytest.raises(CoWOrderBookRateLimitError, match="quote_sell"):
+    with pytest.raises(CoWOrderBookRateLimitError, match=r"quote_sell.*retry after 17s"):
         await client.quote_sell(quote_request())
 
-    assert api.calls == 3
+    assert api.calls == 1
 
 
 @pytest.mark.asyncio

@@ -333,6 +333,8 @@ async def _call_order_book(
             cause = exc
             error = _map_order_book_error(operation, exc)
 
+        if isinstance(error, CoWOrderBookRateLimitError):
+            raise error from cause
         if attempt >= max_attempts:
             raise error from cause
         LOGGER.warning(
@@ -376,6 +378,11 @@ def _map_order_book_error(operation: str, exc: Exception) -> CoWOrderBookAPIErro
     if isinstance(exc, ApiResponseError):
         if _is_rate_limit(exc):
             message = f"rate-limited by CoW Order Book API during {operation}: {exc}"
+            retry_after_seconds = _retry_after_seconds(exc)
+            if retry_after_seconds is not None:
+                message = f"{message}; retry after {retry_after_seconds}s"
+            else:
+                message = f"{message}; retry after provider cooldown"
             return CoWOrderBookRateLimitError(message)
         if _is_server_error(exc):
             message = f"transient CoW Order Book API failure during {operation}: {exc}"
@@ -406,6 +413,30 @@ def _is_server_error(exc: Exception) -> bool:
     """Return whether cowpy exposed a retryable server-side API failure."""
     status = _api_status(exc)
     return status is not None and HTTP_SERVER_ERROR_MIN <= status < HTTP_SERVER_ERROR_MAX
+
+
+def _retry_after_seconds(exc: Exception) -> int | None:
+    """Extract a positive Retry-After hint from cowpy response shapes."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None and isinstance(response, dict):
+        headers = response.get("headers")
+    candidates: list[Any] = []
+    if isinstance(headers, dict):
+        candidates.extend(
+            headers.get(key)
+            for key in ("Retry-After", "retry-after", "retry_after", "retryAfter")
+        )
+    if isinstance(response, dict):
+        candidates.extend(response.get(key) for key in ("retry_after", "retryAfter"))
+    for value in candidates:
+        try:
+            parsed = int(str(value))
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
+    return None
 
 
 def _api_status(exc: Exception) -> int | None:
