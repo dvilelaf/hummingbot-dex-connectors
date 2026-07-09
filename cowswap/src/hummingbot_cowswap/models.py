@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 MAX_SLIPPAGE_BPS = 10_000
 
@@ -59,6 +59,7 @@ class CoWConfig(BaseModel):
     env: str = "prod"
     valid_to: int | None = None
     settlement_contract: str | None = None
+    partner_api_key: SecretStr | None = None
 
     @field_validator("slippage_bps")
     @classmethod

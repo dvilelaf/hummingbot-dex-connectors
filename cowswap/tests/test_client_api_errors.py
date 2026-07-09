@@ -8,7 +8,11 @@ from typing import NoReturn
 
 import pytest
 
-from hummingbot_cowswap.client import CowDaoOrderBookClient
+from hummingbot_cowswap.client import (
+    CowDaoOrderBookClient,
+    _PartnerAPIConfig,
+    _PartnerRequestStrategy,
+)
 from hummingbot_cowswap.cowpy import ensure_cowpy_submodule_imports
 from hummingbot_cowswap.errors import (
     CoWOrderBookAPIError,
@@ -219,6 +223,30 @@ class TradeWithNewFeePolicyApi:
         ]
 
 
+class FakeAPIConfig:
+    def __init__(self, base_url: str = "https://api.cow.fi/base") -> None:
+        self.base_url = base_url
+        self.chain_id = 8453
+
+    def get_base_url(self) -> str:
+        return self.base_url
+
+    def get_context(self) -> dict[str, object]:
+        return {"base_url": self.base_url, "other": "value"}
+
+    def with_env(self, env: str) -> FakeAPIConfig:  # noqa: ARG002
+        return FakeAPIConfig("https://barn.api.cow.fi/base")
+
+
+class FakeHttpClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def request(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return SimpleNamespace(status_code=200)
+
+
 @pytest.mark.asyncio
 async def test_quote_sell_wraps_timeout_as_transient_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Quote timeouts surface as connector-controlled transient errors."""
@@ -229,6 +257,40 @@ async def test_quote_sell_wraps_timeout_as_transient_error(monkeypatch: pytest.M
         await client.quote_sell(quote_request())
 
     assert exc_info.value.__cause__.__class__.__name__ == "UnexpectedResponseError"
+
+
+def test_partner_api_config_routes_to_partner_hosts() -> None:
+    config = _PartnerAPIConfig(FakeAPIConfig())
+
+    assert config.get_base_url() == "https://partners.cow.fi/base"
+    assert config.get_context() == {"base_url": "https://partners.cow.fi/base", "other": "value"}
+    assert config.with_env("staging").get_base_url() == "https://partners.barn.cow.fi/base"
+
+
+@pytest.mark.asyncio
+async def test_partner_request_strategy_sends_api_key_header() -> None:
+    client = FakeHttpClient()
+    strategy = _PartnerRequestStrategy("partner-secret")
+
+    await strategy.make_request(
+        client,
+        "https://partners.cow.fi/base/api/v1/quote",
+        "POST",
+        json={},
+    )
+
+    assert client.calls == [
+        {
+            "url": "https://partners.cow.fi/base/api/v1/quote",
+            "method": "POST",
+            "json": {},
+            "headers": {
+                "accept": "application/json",
+                "content-type": "application/json",
+                "X-API-Key": "partner-secret",
+            },
+        }
+    ]
 
 
 @pytest.mark.asyncio
