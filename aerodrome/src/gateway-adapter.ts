@@ -1,3 +1,5 @@
+import { Interface } from '@ethersproject/abi';
+import { BigNumber } from '@ethersproject/bignumber';
 import type { Aerodrome } from './aerodrome.js';
 import type {
   AerodromeExecutionPlan,
@@ -47,10 +49,35 @@ export interface AerodromeGatewayExecutedTransaction {
   readonly status: GatewayExecutionStatus;
 }
 
+export interface ReceiptLog {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+}
+
+export interface TransactionReceipt {
+  readonly status: number;
+  readonly gasUsed: string;
+  readonly effectiveGasPrice: string;
+  readonly blockTimestamp: number;
+  readonly logs: readonly ReceiptLog[];
+}
+
+export interface SwapExecutionData {
+  readonly tokenIn: string;
+  readonly tokenOut: string;
+  readonly amountIn: string;
+  readonly amountOut: string;
+  readonly fee: string;
+  readonly feeAsset: 'ETH';
+}
+
 export interface AerodromeGatewaySwapExecutionResponse {
   readonly signature: string;
   readonly status: GatewayExecutionStatus;
+  readonly executedAt?: string;
   readonly transactions: readonly AerodromeGatewayExecutedTransaction[];
+  readonly data?: SwapExecutionData;
 }
 
 export interface AerodromeGatewayTransactionExecutor {
@@ -68,6 +95,7 @@ export interface GatewayTransactionBroadcastResponse {
   readonly transaction_hash?: string;
   readonly status?: GatewayExecutionStatus;
   readonly txStatus?: GatewayExecutionStatus;
+  readonly receipt?: TransactionReceipt;
 }
 
 export type AerodromeGatewayTokenResolver = (symbol: string) => Promise<TokenInfo> | TokenInfo;
@@ -92,11 +120,15 @@ export async function planAerodromeGatewaySwap(
   return connector.executeSwap({ ...quoteRequest, walletAddress: request.walletAddress });
 }
 
+interface InternalExecutedTransaction extends AerodromeGatewayExecutedTransaction {
+  readonly receipt?: TransactionReceipt | undefined;
+}
+
 export async function executeAerodromeGatewaySwapPlan(
   plan: AerodromeExecutionPlan,
   executor: AerodromeGatewayTransactionExecutor,
 ): Promise<AerodromeGatewaySwapExecutionResponse> {
-  const transactions: AerodromeGatewayExecutedTransaction[] = [];
+  const transactions: InternalExecutedTransaction[] = [];
 
   if (plan.approval !== undefined) {
     transactions.push(await executePlannedTransaction('approval', plan.approval, executor));
@@ -107,7 +139,7 @@ export async function executeAerodromeGatewaySwapPlan(
   }
 
   transactions.push(await executePlannedTransaction('swap', plan.swap, executor));
-  return swapExecutionResponse(transactions);
+  return swapExecutionResponse(transactions, plan);
 }
 
 async function gatewayQuoteRequestToAerodromeRequest(
@@ -174,28 +206,153 @@ async function executePlannedTransaction(
   kind: AerodromeGatewayExecutedTransaction['kind'],
   transaction: PlannedTransaction,
   executor: AerodromeGatewayTransactionExecutor,
-): Promise<AerodromeGatewayExecutedTransaction> {
+): Promise<InternalExecutedTransaction> {
   const response = await executor.executeTransaction(transaction);
   const signature = transactionSignature(response);
   return {
     kind,
     signature,
     status: response.status ?? response.txStatus ?? 0,
+    ...(response.receipt === undefined ? {} : { receipt: response.receipt }),
   };
 }
 
 function swapExecutionResponse(
-  transactions: readonly AerodromeGatewayExecutedTransaction[],
+  transactions: readonly InternalExecutedTransaction[],
+  plan?: AerodromeExecutionPlan,
 ): AerodromeGatewaySwapExecutionResponse {
   const last = transactions[transactions.length - 1];
   if (last === undefined) {
     throw new Error('Aerodrome swap execution produced no transactions');
   }
+
+  const topStatus = executionStatus(transactions);
+
+  if (topStatus === 'CONFIRMED' || topStatus === 1) {
+    if (plan === undefined) {
+      throw new Error('Aerodrome swap confirmed but execution plan is required');
+    }
+    for (const tx of transactions) {
+      if (tx.receipt === undefined || tx.receipt.status !== 1) {
+        throw new Error('Aerodrome swap confirmed but missing status-1 receipt evidence');
+      }
+    }
+
+    const swapReceipt = last.receipt!;
+    const erc20Interface = new Interface([
+      'event Transfer(address indexed from, address indexed to, uint256 value)',
+    ]);
+
+    let tokenInFromWallet = BigNumber.from(0);
+    let tokenInToWallet = BigNumber.from(0);
+    let tokenOutToWallet = BigNumber.from(0);
+    let tokenOutFromWallet = BigNumber.from(0);
+
+    for (const log of swapReceipt.logs) {
+      let parsed;
+      try {
+        parsed = erc20Interface.parseLog({ topics: [...log.topics], data: log.data });
+      } catch {
+        continue;
+      }
+      if (parsed === undefined) continue;
+
+      if (
+        typeof parsed.args.from !== 'string' ||
+        typeof parsed.args.to !== 'string'
+      ) {
+        continue;
+      }
+
+      let transferValue: BigNumber;
+      try {
+        transferValue = BigNumber.from(String(parsed.args.value));
+      } catch {
+        continue;
+      }
+
+      if (
+        log.address.toLowerCase() === plan.quote.tokenIn.address.toLowerCase()
+      ) {
+        if (parsed.args.from.toLowerCase() === plan.swap.from.toLowerCase()) {
+          tokenInFromWallet = tokenInFromWallet.add(transferValue);
+        }
+        if (parsed.args.to.toLowerCase() === plan.swap.from.toLowerCase()) {
+          tokenInToWallet = tokenInToWallet.add(transferValue);
+        }
+      }
+      if (
+        log.address.toLowerCase() === plan.quote.tokenOut.address.toLowerCase()
+      ) {
+        if (parsed.args.to.toLowerCase() === plan.swap.from.toLowerCase()) {
+          tokenOutToWallet = tokenOutToWallet.add(transferValue);
+        }
+        if (parsed.args.from.toLowerCase() === plan.swap.from.toLowerCase()) {
+          tokenOutFromWallet = tokenOutFromWallet.add(transferValue);
+        }
+      }
+    }
+
+    if (
+      tokenInFromWallet.lte(tokenInToWallet) ||
+      tokenOutToWallet.lte(tokenOutFromWallet)
+    ) {
+      throw new Error('Aerodrome swap confirmed but missing expected Transfer events');
+    }
+
+    const amountInAtomic = tokenInFromWallet.sub(tokenInToWallet);
+    const amountOutAtomic = tokenOutToWallet.sub(tokenOutFromWallet);
+
+    const amountIn = atomicToDecimal(amountInAtomic, plan.quote.tokenIn.decimals);
+    const amountOut = atomicToDecimal(amountOutAtomic, plan.quote.tokenOut.decimals);
+
+    let totalGasWei = BigNumber.from(0);
+    for (const tx of transactions) {
+      if (tx.receipt !== undefined) {
+        totalGasWei = totalGasWei.add(
+          BigNumber.from(tx.receipt.gasUsed).mul(BigNumber.from(tx.receipt.effectiveGasPrice)),
+        );
+      }
+    }
+
+    const fee = atomicToDecimal(totalGasWei, 18);
+    const executedAt = new Date(swapReceipt.blockTimestamp * 1000).toISOString();
+
+    return {
+      signature: last.signature,
+      status: 1,
+      executedAt,
+      transactions: transactions.map(stripReceipt),
+      data: {
+        tokenIn: plan.quote.tokenIn.symbol,
+        tokenOut: plan.quote.tokenOut.symbol,
+        amountIn,
+        amountOut,
+        fee,
+        feeAsset: 'ETH',
+      },
+    };
+  }
+
   return {
     signature: last.signature,
-    status: executionStatus(transactions),
-    transactions,
+    status: topStatus,
+    transactions: transactions.map(stripReceipt),
   };
+}
+
+function stripReceipt(
+  tx: InternalExecutedTransaction,
+): AerodromeGatewayExecutedTransaction {
+  return { kind: tx.kind, signature: tx.signature, status: tx.status };
+}
+
+function atomicToDecimal(amount: BigNumber, decimals: number): string {
+  const divisor = BigNumber.from(10).pow(decimals);
+  const integer = amount.div(divisor);
+  const fraction = amount.mod(divisor);
+  const padded = fraction.toString().padStart(decimals, '0').replace(/0+$/, '');
+  return padded === '' ? integer.toString() : `${integer.toString()}.${padded}`;
 }
 
 function transactionSignature(response: GatewayTransactionBroadcastResponse): string {
