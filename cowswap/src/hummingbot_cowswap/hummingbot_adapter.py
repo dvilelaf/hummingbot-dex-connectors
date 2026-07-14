@@ -12,7 +12,7 @@ from uuid import uuid4
 from hummingbot_cowswap.models import BuyOrderRequest, CoWToken, OrderState, SellOrderRequest
 
 CONNECTOR_NAME = "cowswap"
-SUPPORTED_ORDER_TYPES = ("MARKET",)
+SUPPORTED_ORDER_TYPES = ("MARKET", "LIMIT")
 CONFIG_MAP = {
     "connector": CONNECTOR_NAME,
     "connector_name": CONNECTOR_NAME,
@@ -110,6 +110,7 @@ class _OrderEventContext:
     trading_pair: str | None = None
     trade_type: str | None = None
     amount: str | None = None
+    order_type: str = "MARKET"
 
 
 class HummingbotCoWAdapter:
@@ -218,12 +219,14 @@ class HummingbotCoWAdapter:
         _reject_private_key_material(kwargs)
         wait_for_settlement = bool(kwargs.pop("wait_for_settlement", False))
         max_status_polls = _max_status_polls(kwargs)
-        if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
+        normalized_order_type = _order_type_name(order_type)
+        if normalized_order_type not in SUPPORTED_ORDER_TYPES:
             message = f"unsupported order_type for CoW shim: {order_type}"
             raise ValueError(message)
-        if price is not None:
+        if normalized_order_type == "MARKET" and price is not None:
             message = "CoW shim only supports quoted market-style SELL submissions"
             raise ValueError(message)
+        limit_price = _validate_limit_price(price) if normalized_order_type == "LIMIT" else None
         normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
         sell_token, buy_token = self._tokens_for_pair(trading_pair)
         request = SellOrderRequest(
@@ -232,6 +235,8 @@ class HummingbotCoWAdapter:
             sell_token=sell_token,
             buy_token=buy_token,
             amount=str(amount),
+            order_type=normalized_order_type,
+            price=limit_price,
         )
         tracked = await self._connector.submit_sell_order(request)
         self._in_flight_orders[request.client_order_id] = tracked
@@ -243,6 +248,7 @@ class HummingbotCoWAdapter:
                 trading_pair=normalized_pair,
                 trade_type="SELL",
                 amount=str(amount),
+                order_type=normalized_order_type,
             ),
         )
         if wait_for_settlement:
@@ -266,20 +272,24 @@ class HummingbotCoWAdapter:
         _reject_private_key_material(kwargs)
         wait_for_settlement = bool(kwargs.pop("wait_for_settlement", False))
         max_status_polls = _max_status_polls(kwargs)
-        if _order_type_name(order_type) not in SUPPORTED_ORDER_TYPES:
+        normalized_order_type = _order_type_name(order_type)
+        if normalized_order_type not in SUPPORTED_ORDER_TYPES:
             message = f"unsupported order_type for CoW shim: {order_type}"
             raise ValueError(message)
-        if price is not None:
+        if normalized_order_type == "MARKET" and price is not None:
             message = "CoW shim only supports quoted market-style BUY submissions"
             raise ValueError(message)
+        limit_price = _validate_limit_price(price) if normalized_order_type == "LIMIT" else None
         normalized_pair = self.convert_from_exchange_trading_pair(trading_pair)
-        sell_token, buy_token = self._tokens_for_pair(trading_pair)
+        base_token, quote_token = self._tokens_for_pair(trading_pair)
         request = BuyOrderRequest(
             client_order_id=client_order_id or _new_client_order_id(normalized_pair),
             trading_pair=normalized_pair,
-            sell_token=sell_token,
-            buy_token=buy_token,
+            sell_token=quote_token,
+            buy_token=base_token,
             amount=str(amount),
+            order_type=normalized_order_type,
+            price=limit_price,
         )
         tracked = await self._connector.submit_buy_order(request)
         self._in_flight_orders[request.client_order_id] = tracked
@@ -291,6 +301,7 @@ class HummingbotCoWAdapter:
                 trading_pair=normalized_pair,
                 trade_type="BUY",
                 amount=str(amount),
+                order_type=normalized_order_type,
             ),
         )
         if wait_for_settlement:
@@ -307,7 +318,10 @@ class HummingbotCoWAdapter:
         self._emit_order_event(
             _hummingbot_order_event_tag(tracked),
             tracked,
-            context=_OrderEventContext(client_order_id=client_order_id),
+            context=_OrderEventContext(
+                client_order_id=client_order_id,
+                order_type=_order_type(tracked),
+            ),
         )
         return tracked
 
@@ -325,7 +339,10 @@ class HummingbotCoWAdapter:
         return self._emit_order_event(
             event_tag,
             order,
-            context=_OrderEventContext(client_order_id=client_order_id),
+            context=_OrderEventContext(
+                client_order_id=client_order_id,
+                order_type=_order_type(order),
+            ),
         )
 
     async def _poll_until_terminal(self, client_order_id: str, *, max_polls: int) -> object:
@@ -363,6 +380,7 @@ class HummingbotCoWAdapter:
             event_tag=event_tag,
             client_order_id=context.client_order_id or _order_client_order_id(order),
             trading_pair=context.trading_pair or _order_trading_pair(order),
+            order_type=context.order_type,
             trade_type=context.trade_type,
             order_state=_hummingbot_order_state(order),
             timestamp=time(),
@@ -396,6 +414,21 @@ def _max_status_polls(kwargs: dict[str, object]) -> int:
         message = "max_status_polls must be an integer"
         raise TypeError(message)
     return int(max_status_polls_value)
+
+
+def _validate_limit_price(price: Decimal | str | None) -> Decimal:
+    if price is None:
+        message = "LIMIT orders require a positive price"
+        raise ValueError(message)
+    try:
+        parsed = Decimal(str(price))
+    except (ArithmeticError, ValueError) as exc:
+        message = "LIMIT orders require a positive price"
+        raise ValueError(message) from exc
+    if not parsed.is_finite() or parsed <= 0:
+        message = "LIMIT orders require a positive price"
+        raise ValueError(message)
+    return parsed
 
 
 def _hummingbot_order_state(order: object) -> str:
@@ -455,6 +488,14 @@ def _order_trading_pair(order: object) -> str:
 def _order_exchange_order_id(order: object) -> str | None:
     value = _order_value(order, "order_uid")
     return str(value) if value is not None else None
+
+
+def _order_type(order: object) -> str:
+    value = _order_value(order, "order_type")
+    metadata = _order_value(order, "metadata")
+    if value is None and isinstance(metadata, Mapping):
+        value = metadata.get("order_type")
+    return _order_type_name(value or "MARKET")
 
 
 def _order_value(order: object, key: str) -> object | None:

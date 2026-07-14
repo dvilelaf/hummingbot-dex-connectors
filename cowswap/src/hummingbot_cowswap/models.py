@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MAX_SLIPPAGE_BPS = 10_000
 
@@ -80,6 +80,38 @@ class SellOrderRequest(BaseModel):
     amount: str
     valid_to: int | None = None
     partially_fillable: bool = False
+    order_type: str = "MARKET"
+    price: Decimal | None = None
+
+    @field_validator("order_type")
+    @classmethod
+    def validate_order_type(cls, value: str) -> str:
+        """Normalize and validate the requested Hummingbot order type."""
+        normalized = value.upper()
+        if normalized not in {"MARKET", "LIMIT"}:
+            message = f"unsupported order_type: {value}"
+            raise ValueError(message)
+        return normalized
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, value: Decimal | None) -> Decimal | None:
+        """Require any supplied price to be finite and strictly positive."""
+        if value is not None and (not value.is_finite() or value <= 0):
+            message = "price must be a positive finite Decimal"
+            raise ValueError(message)
+        return value
+
+    @model_validator(mode="after")
+    def validate_limit_price(self) -> SellOrderRequest:
+        """Require prices for LIMIT requests and reject them for MARKET requests."""
+        if self.order_type == "LIMIT" and self.price is None:
+            message = "LIMIT orders require a positive price"
+            raise ValueError(message)
+        if self.order_type == "MARKET" and self.price is not None:
+            message = "MARKET orders do not accept a price"
+            raise ValueError(message)
+        return self
 
 
 class BuyOrderRequest(BaseModel):
@@ -92,6 +124,38 @@ class BuyOrderRequest(BaseModel):
     amount: str
     valid_to: int | None = None
     partially_fillable: bool = False
+    order_type: str = "MARKET"
+    price: Decimal | None = None
+
+    @field_validator("order_type")
+    @classmethod
+    def validate_order_type(cls, value: str) -> str:
+        """Normalize and validate the requested Hummingbot order type."""
+        normalized = value.upper()
+        if normalized not in {"MARKET", "LIMIT"}:
+            message = f"unsupported order_type: {value}"
+            raise ValueError(message)
+        return normalized
+
+    @field_validator("price")
+    @classmethod
+    def validate_price(cls, value: Decimal | None) -> Decimal | None:
+        """Require any supplied price to be finite and strictly positive."""
+        if value is not None and (not value.is_finite() or value <= 0):
+            message = "price must be a positive finite Decimal"
+            raise ValueError(message)
+        return value
+
+    @model_validator(mode="after")
+    def validate_limit_price(self) -> BuyOrderRequest:
+        """Require prices for LIMIT requests and reject them for MARKET requests."""
+        if self.order_type == "LIMIT" and self.price is None:
+            message = "LIMIT orders require a positive price"
+            raise ValueError(message)
+        if self.order_type == "MARKET" and self.price is not None:
+            message = "MARKET orders do not accept a price"
+            raise ValueError(message)
+        return self
 
 
 class TrackedOrder(BaseModel):

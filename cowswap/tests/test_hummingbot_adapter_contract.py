@@ -60,8 +60,8 @@ def test_adapter_exposes_conservative_hummingbot_contract() -> None:
     assert adapter.connector_name == "cowswap"
     assert adapter.config_map()["connector"] == "cowswap"
     assert adapter.config_map()["supported_trade_types"] == ("BUY", "SELL")
-    assert adapter.order_types == ("MARKET",)
-    assert adapter.supported_order_types() == ("MARKET",)
+    assert adapter.order_types == ("MARKET", "LIMIT")
+    assert adapter.supported_order_types() == ("MARKET", "LIMIT")
     assert adapter.in_flight_orders == {}
     assert set(adapter.trading_rules) == {"USDC-WETH"}
     assert adapter.trading_rules["USDC-WETH"].min_base_amount_increment == Decimal("0.000001")
@@ -120,12 +120,38 @@ async def test_buy_converts_hummingbot_params_to_buy_order_request() -> None:
         BuyOrderRequest(
             client_order_id="cid-buy-1",
             trading_pair="USDC-WETH",
-            sell_token=USDC,
-            buy_token=WETH,
+            sell_token=WETH,
+            buy_token=USDC,
             amount="0.5",
         )
     ]
     assert adapter.in_flight_orders == {"cid-buy-1": result}
+
+
+@pytest.mark.asyncio
+async def test_limit_submission_preserves_order_type_and_decimal_price() -> None:
+    connector = FakeConnector()
+    adapter = HummingbotCoWAdapter(connector, {"USDC-WETH": (USDC, WETH)})
+
+    await adapter.sell(
+        trading_pair="USDC-WETH",
+        amount=Decimal("1.25"),
+        order_type="LIMIT",
+        price=Decimal("2500.5"),
+        client_order_id="cid-limit",
+    )
+
+    assert connector.submitted == [
+        SellOrderRequest(
+            client_order_id="cid-limit",
+            trading_pair="USDC-WETH",
+            sell_token=USDC,
+            buy_token=WETH,
+            amount="1.25",
+            order_type="LIMIT",
+            price=Decimal("2500.5"),
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -138,8 +164,11 @@ async def test_adapter_rejects_private_keys_and_unsupported_runtime_surface() ->
     with pytest.raises(ValueError, match="private key"):
         await adapter.buy("USDC-WETH", Decimal(1), private_key="0xabc")
 
-    with pytest.raises(ValueError, match="unsupported order_type"):
+    with pytest.raises(ValueError, match="positive price"):
         await adapter.sell("USDC-WETH", Decimal(1), order_type="LIMIT")
+
+    with pytest.raises(ValueError, match="positive price"):
+        await adapter.sell("USDC-WETH", Decimal(1), order_type="LIMIT", price=Decimal(0))
 
     with pytest.raises(ValueError, match="market-style SELL"):
         await adapter.sell("USDC-WETH", Decimal(1), price=Decimal(1))

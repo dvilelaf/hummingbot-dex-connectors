@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 from time import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -144,6 +145,16 @@ class CoWConnector:
         quote_valid_to = _quote_valid_to(quote)
         fee_amount = _order_fee_amount(self.config, quote)
         order_sell_amount = _order_sell_amount(self.config, quote)
+        quote_id = _quote_id(quote)
+        if request.order_type == "LIMIT":
+            order_buy_amount = _limit_sell_buy_amount(
+                request,
+                order_sell_amount,
+                _quote_buy_amount(quote),
+            )
+            quote_id = None
+        else:
+            order_buy_amount = minimum_buy_amount
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
@@ -155,10 +166,10 @@ class CoWConnector:
             "owner": self.config.owner,
             "receiver": self.config.receiver,
             "sell_amount": order_sell_amount,
-            "buy_amount": minimum_buy_amount,
+            "buy_amount": order_buy_amount,
             "fee_amount": fee_amount,
             "valid_to": quote_valid_to,
-            "quote_id": _quote_id(quote),
+            "quote_id": quote_id,
             "app_data": self.config.app_data,
             "kind": "sell",
             "partially_fillable": request.partially_fillable,
@@ -178,14 +189,16 @@ class CoWConnector:
             sell_token=request.sell_token,
             buy_token=request.buy_token,
             sell_amount=order_sell_amount,
-            buy_amount=minimum_buy_amount,
+            buy_amount=order_buy_amount,
             valid_to=quote_valid_to,
-            quote_id=_quote_id(quote),
+            quote_id=quote_id,
             digest=_digest_from_uid(order_uid),
             signing_scheme="eip712",
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
+        if request.order_type == "LIMIT":
+            tracked.metadata["order_type"] = "LIMIT"
         tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
@@ -218,21 +231,33 @@ class CoWConnector:
         _validate_verified_quote(quote)
         quote_valid_to = _quote_valid_to(quote)
         fee_amount = _order_fee_amount(self.config, quote)
+        quote_id = _quote_id(quote)
+        if request.order_type == "LIMIT":
+            order_buy_amount = _quote_buy_amount(quote)
+            order_sell_amount = _limit_buy_sell_amount(
+                request,
+                order_buy_amount,
+                _order_sell_amount(self.config, quote),
+            )
+            quote_id = None
+        else:
+            order_sell_amount = maximum_sell_amount
+            order_buy_amount = _quote_buy_amount(quote)
         if quote_valid_to <= int(self.clock()):
             message = f"stale CoW quote valid_to={quote_valid_to}"
             raise StaleQuoteError(message)
-        self._preflight_sell(request.sell_token, maximum_sell_amount)
+        self._preflight_sell(request.sell_token, order_sell_amount)
         order_payload = {
             "chain_id": self.config.chain_id,
             "sell_token": request.sell_token.address,
             "buy_token": request.buy_token.address,
             "owner": self.config.owner,
             "receiver": self.config.receiver,
-            "sell_amount": maximum_sell_amount,
-            "buy_amount": _quote_buy_amount(quote),
+            "sell_amount": order_sell_amount,
+            "buy_amount": order_buy_amount,
             "fee_amount": fee_amount,
             "valid_to": quote_valid_to,
-            "quote_id": _quote_id(quote),
+            "quote_id": quote_id,
             "app_data": self.config.app_data,
             "kind": "buy",
             "partially_fillable": request.partially_fillable,
@@ -251,15 +276,17 @@ class CoWConnector:
             chain_id=self.config.chain_id,
             sell_token=request.sell_token,
             buy_token=request.buy_token,
-            sell_amount=maximum_sell_amount,
-            buy_amount=_quote_buy_amount(quote),
+            sell_amount=order_sell_amount,
+            buy_amount=order_buy_amount,
             valid_to=quote_valid_to,
-            quote_id=_quote_id(quote),
+            quote_id=quote_id,
             digest=_digest_from_uid(order_uid),
             signing_scheme="eip712",
             partially_fillable=request.partially_fillable,
         )
         tracked.fee_amount = fee_amount
+        if request.order_type == "LIMIT":
+            tracked.metadata["order_type"] = "LIMIT"
         tracked.metadata["signing_mode"] = "hummingbot-managed"
         tracked.state = OrderState.OPEN
         return self.store.save(tracked)
@@ -466,6 +493,99 @@ def _order_sell_amount(config: CoWConfig, quote: object) -> str:
     if config.env.lower() == "staging":
         return _quote_sell_amount(quote)
     return _quote_sell_amount_with_fee(quote)
+
+
+def _limit_sell_buy_amount(
+    request: SellOrderRequest,
+    sell_amount: str,
+    quote_buy_amount: str,
+) -> str:
+    price = _request_price(request.price)
+    _validate_limit_price_against_quote(
+        side="sell",
+        price=price,
+        quote_sell_amount=sell_amount,
+        quote_buy_amount=quote_buy_amount,
+        sell_decimals=request.sell_token.decimals,
+        buy_decimals=request.buy_token.decimals,
+    )
+    return _price_to_atomic(
+        amount=sell_amount,
+        amount_decimals=request.sell_token.decimals,
+        price=price,
+        result_decimals=request.buy_token.decimals,
+        rounding=ROUND_CEILING,
+    )
+
+
+def _limit_buy_sell_amount(
+    request: BuyOrderRequest,
+    buy_amount: str,
+    quote_sell_amount: str,
+) -> str:
+    price = _request_price(request.price)
+    _validate_limit_price_against_quote(
+        side="buy",
+        price=price,
+        quote_sell_amount=quote_sell_amount,
+        quote_buy_amount=buy_amount,
+        sell_decimals=request.sell_token.decimals,
+        buy_decimals=request.buy_token.decimals,
+    )
+    return _price_to_atomic(
+        amount=buy_amount,
+        amount_decimals=request.buy_token.decimals,
+        price=price,
+        result_decimals=request.sell_token.decimals,
+        rounding=ROUND_DOWN,
+    )
+
+
+def _request_price(price: Decimal | None) -> Decimal:
+    if price is None:
+        message = "LIMIT orders require a positive price"
+        raise ValueError(message)
+    return price
+
+
+def _validate_limit_price_against_quote(
+    *,
+    side: str,
+    price: Decimal,
+    quote_sell_amount: str,
+    quote_buy_amount: str,
+    sell_decimals: int,
+    buy_decimals: int,
+) -> None:
+    quote_sell = Decimal(quote_sell_amount) / (Decimal(10) ** sell_decimals)
+    quote_buy = Decimal(quote_buy_amount) / (Decimal(10) ** buy_decimals)
+    quote_price = quote_buy / quote_sell if side == "sell" else quote_sell / quote_buy
+    worsens_quote = (side == "sell" and price < quote_price) or (
+        side == "buy" and price > quote_price
+    )
+    if worsens_quote:
+        message = "LIMIT price would worsen the verified quote"
+        raise ValueError(message)
+
+
+def _price_to_atomic(
+    *,
+    amount: str,
+    amount_decimals: int,
+    price: Decimal,
+    result_decimals: int,
+    rounding: str,
+) -> str:
+    result = (
+        Decimal(amount)
+        / (Decimal(10) ** amount_decimals)
+        * price
+        * (Decimal(10) ** result_decimals)
+    ).to_integral_value(rounding=rounding)
+    if result <= 0:
+        message = "LIMIT price produces a zero atomic amount"
+        raise ValueError(message)
+    return str(int(result))
 
 
 def _quote_sell_amount(quote: object) -> str:
