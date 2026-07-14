@@ -15,7 +15,7 @@ def test_connector_metadata_serializes_hummingbot_api_surface() -> None:
     assert metadata["connector"] == "cowswap"
     assert metadata["config_map"]["connector_name"] == "cowswap"
     assert metadata["config_map"]["uses_raw_private_key"] is False
-    assert metadata["order_types"] == ["MARKET"]
+    assert metadata["order_types"] == ["MARKET", "LIMIT"]
     assert metadata["trade_types"] == ["BUY", "SELL"]
     assert metadata["supported_chains"] == [
         {"chain_id": 1, "chain_name": "ethereum"},
@@ -36,6 +36,7 @@ def test_readiness_contract_names_dynamic_api_checks_for_marlin() -> None:
 
     assert contract["connector"] == "cowswap"
     assert contract["symbol"] == "USDC-WETH"
+    assert contract["expected_order_types"] == ["MARKET", "LIMIT"]
     assert [check["name"] for check in contract["checks"]] == [
         "connector_discovery",
         "config_map",
@@ -57,7 +58,7 @@ def test_hummingbot_api_responses_cover_connector_discovery_routes() -> None:
     responses = hummingbot_api_responses(symbol="USDC-WETH")
 
     assert responses["/connectors/"] == ["cowswap"]
-    assert responses["/connectors/cowswap/order-types"] == ["MARKET"]
+    assert responses["/connectors/cowswap/order-types"] == ["MARKET", "LIMIT"]
     assert responses["/connectors/cowswap/config-map"]["connector"] == "cowswap"
     assert responses["/connectors/cowswap/config-map"]["uses_raw_private_key"] is False
     assert responses["/connectors/cowswap/trading-rules?trading_pairs=USDC-WETH"] == [
@@ -100,7 +101,7 @@ def test_evaluate_readiness_passes_with_normalized_hummingbot_payloads() -> None
     result = evaluate_readiness(
         connector_names=["cowswap"],
         config_map={"connector": "cowswap", "uses_raw_private_key": False},
-        order_types=["MARKET"],
+        order_types=["MARKET", "LIMIT"],
         trading_rules=[{"trading_pair": "USDC-WETH", "min_order_size": "0.000001"}],
         symbol="USDC-WETH",
         account_connector_loaded=True,
@@ -119,6 +120,23 @@ def test_evaluate_readiness_passes_with_normalized_hummingbot_payloads() -> None
         ],
         "failed_checks": [],
     }
+
+
+def test_evaluate_readiness_requires_all_advertised_order_types() -> None:
+    from hummingbot_cowswap.runtime_metadata import evaluate_readiness
+
+    result = evaluate_readiness(
+        connector_names=["cowswap"],
+        config_map={"connector": "cowswap", "uses_raw_private_key": False},
+        order_types=["MARKET"],
+        trading_rules=[{"trading_pair": "USDC-WETH", "min_order_size": "0.000001"}],
+        symbol="USDC-WETH",
+        account_connector_loaded=True,
+        active_orders=[],
+    )
+
+    assert result["ready"] is False
+    assert result["failed_checks"] == ["order_types"]
 
 
 def test_runtime_metadata_cli_supports_docker_build_smoke() -> None:
@@ -142,4 +160,6 @@ def test_runtime_metadata_cli_supports_docker_build_smoke() -> None:
         ],
         text=True,
     )
-    assert json.loads(api_output)["/connectors/"] == ["cowswap"]
+    api_responses = json.loads(api_output)
+    assert api_responses["/connectors/"] == ["cowswap"]
+    assert api_responses["/connectors/cowswap/order-types"] == ["MARKET", "LIMIT"]

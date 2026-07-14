@@ -57,7 +57,7 @@ def readiness_contract(
     return {
         "connector": CONNECTOR_NAME,
         "symbol": symbol,
-        "expected_order_type": SUPPORTED_ORDER_TYPES[0],
+        "expected_order_types": list(SUPPORTED_ORDER_TYPES),
         "expected_trade_types": list(SUPPORTED_TRADE_TYPES),
         "checks": [
             {
@@ -76,7 +76,7 @@ def readiness_contract(
                 "name": "order_types",
                 "method": "GET",
                 "path": f"/connectors/{CONNECTOR_NAME}/order-types",
-                "requires": f"response contains {SUPPORTED_ORDER_TYPES[0]}",
+                "requires": f"response contains all of {', '.join(SUPPORTED_ORDER_TYPES)}",
             },
             {
                 "name": "trading_rules",
@@ -124,7 +124,7 @@ def evaluate_readiness(
         },
         {
             "name": "order_types",
-            "passed": _contains_text(order_types, SUPPORTED_ORDER_TYPES[0]),
+            "passed": _contains_all_text(order_types, SUPPORTED_ORDER_TYPES),
         },
         {
             "name": "trading_rules",
@@ -194,7 +194,9 @@ def _validate_static_metadata() -> None:
         message = "connector metadata is inconsistent"
         raise RuntimeError(message)
     order_types = metadata.get("order_types")
-    if not isinstance(order_types, list) or SUPPORTED_ORDER_TYPES[0] not in order_types:
+    if not isinstance(order_types, list) or not _contains_all_text(
+        order_types, SUPPORTED_ORDER_TYPES
+    ):
         message = "runtime metadata does not expose the expected order type"
         raise RuntimeError(message)
     if not _config_map_is_safe(CONFIG_MAP):
@@ -219,6 +221,15 @@ def _contains_text(items: Iterable[object], expected: str) -> bool:
         if any(str(value).casefold() == expected_normalized for value in values):
             return True
     return False
+
+
+def _contains_all_text(items: Iterable[object], expected: Iterable[str]) -> bool:
+    expected_normalized = {value.casefold() for value in expected}
+    found: set[str] = set()
+    for item in items:
+        values = item.values() if isinstance(item, Mapping) else (item,)
+        found.update(str(value).casefold() for value in values)
+    return expected_normalized.issubset(found)
 
 
 def _config_map_is_safe(config_map: Mapping[str, object]) -> bool:
