@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -242,6 +243,74 @@ async def test_submit_rechecks_allowance_against_quote_fee(tmp_path: Path) -> No
         await cow.submit_sell_order(request())
 
     assert client.quote_requests != []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_limit_preflight_uses_request_amount_without_quote_fee(tmp_path: Path) -> None:
+    """LIMIT preflight checks the requested sell amount without a quote fee."""
+    client = FakeClient(fee_amount="1234")
+    reader = FakeEvmReader(balance="1000000", allowance="1000000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+    cow.clock = lambda: 1_000.0
+
+    tracked = await cow.submit_sell_order(
+        request().model_copy(
+            update={
+                "order_type": "LIMIT",
+                "price": Decimal("0.6"),
+            }
+        )
+    )
+
+    assert tracked.sell_amount == "1000000"
+    assert client.quote_requests == []
+    assert client.posted_orders[0]["fee_amount"] == "0"
+
+
+@pytest.mark.asyncio
+async def test_submit_buy_limit_rejects_insufficient_spend_balance_without_quote(
+    tmp_path: Path,
+) -> None:
+    """BUY LIMIT preflight checks the USDC spend amount before any quote or post."""
+    client = FakeClient()
+    reader = FakeEvmReader(balance="949999", allowance="950000")
+    cow = connector(tmp_path, evm_reader=reader, client=client)
+    cow.clock = lambda: 1_000.0
+
+    with pytest.raises(InsufficientBalanceError, match="insufficient USDC balance"):
+        await cow.submit_buy_order(
+            buy_request().model_copy(
+                update={
+                    "order_type": "LIMIT",
+                    "price": Decimal("1.9"),
+                }
+            )
+        )
+
+    assert client.quote_requests == []
+    assert client.posted_orders == []
+
+
+@pytest.mark.asyncio
+async def test_submit_limit_rejects_expired_local_valid_to_before_quote(tmp_path: Path) -> None:
+    """Expired LIMIT validity is rejected locally without a quote request."""
+    client = FakeClient()
+    cow = connector(tmp_path, client=client)
+    cow.clock = lambda: 1_000.75
+
+    with pytest.raises(StaleQuoteError, match="stale CoW order"):
+        await cow.submit_sell_order(
+            request().model_copy(
+                update={
+                    "order_type": "LIMIT",
+                    "price": Decimal("0.6"),
+                    "valid_to": 1_000,
+                }
+            )
+        )
+
+    assert client.quote_requests == []
     assert client.posted_orders == []
 
 

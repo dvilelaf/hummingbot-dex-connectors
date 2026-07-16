@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -18,6 +18,7 @@ from hummingbot_cowswap import (
     OrderState,
     SellOrderRequest,
 )
+from hummingbot_cowswap.connector import UINT256_MAX, _price_to_atomic
 from hummingbot_cowswap.errors import CoWOrderBookAPIError, UnsupportedTokenError
 from hummingbot_cowswap.models import BuyOrderRequest
 from hummingbot_cowswap.persistence import JsonOrderStore
@@ -185,6 +186,48 @@ async def test_quote_buy_normalizes_amounts_and_translates_slippage(tmp_path: Pa
     assert maximum_sell_amount == "1010707"
 
 
+def test_price_to_atomic_rounds_sub_wei_sell_minimum_upward() -> None:
+    assert _price_to_atomic(
+        amount="1000000000000000000",
+        amount_decimals=18,
+        price=Decimal("1.00000000000000000000000000001"),
+        result_decimals=18,
+        rounding=ROUND_CEILING,
+    ) == "1000000000000000001"
+
+
+def test_price_to_atomic_rounds_sub_wei_buy_maximum_downward() -> None:
+    assert _price_to_atomic(
+        amount="1000000000000000000",
+        amount_decimals=18,
+        price=Decimal("0.99999999999999999999999999999"),
+        result_decimals=18,
+        rounding=ROUND_DOWN,
+    ) == "999999999999999999"
+
+
+def test_price_to_atomic_rejects_positive_exponent_overflow() -> None:
+    with pytest.raises(ValueError, match="uint256"):
+        _price_to_atomic(
+            amount="1",
+            amount_decimals=0,
+            price=Decimal("1e1000000000"),
+            result_decimals=0,
+            rounding=ROUND_CEILING,
+        )
+
+
+def test_price_to_atomic_rejects_result_above_uint256() -> None:
+    with pytest.raises(ValueError, match="uint256"):
+        _price_to_atomic(
+            amount=str(UINT256_MAX),
+            amount_decimals=0,
+            price=Decimal("1.1"),
+            result_decimals=0,
+            rounding=ROUND_CEILING,
+        )
+
+
 @pytest.mark.asyncio
 async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state(
     tmp_path: Path,
@@ -203,6 +246,9 @@ async def test_submit_sell_order_posts_quote_derived_order_and_tracks_open_state
     )
 
     assert tracked.state is OrderState.OPEN
+    assert len(client.quote_requests) == 1
+    assert client.posted_orders[0]["valid_to"] == 1_900_000_000
+    assert tracked.valid_to == 1_900_000_000
     assert tracked.client_order_id == "cid-1"
     assert tracked.order_uid.startswith("0xaaaa")
     assert client.posted_orders[0]["sell_amount"] == "1001234"
@@ -375,6 +421,9 @@ async def test_submit_buy_order_posts_quote_derived_order_and_tracks_open_state(
     )
 
     assert tracked.state is OrderState.OPEN
+    assert len(client.quote_requests) == 1
+    assert client.posted_orders[0]["valid_to"] == 1_900_000_000
+    assert tracked.valid_to == 1_900_000_000
     assert tracked.client_order_id == "cid-buy-1"
     assert tracked.order_uid.startswith("0xaaaa")
     assert client.posted_orders[0]["kind"] == "buy"
@@ -401,6 +450,7 @@ async def test_submit_sell_limit_uses_better_limit_economics_without_quote_id(
 ) -> None:
     client = FakeCoWClient()
     cow = connector(tmp_path, client)
+    cow.clock = lambda: 1_000.75
 
     tracked = await cow.submit_sell_order(
         SellOrderRequest(
@@ -416,14 +466,29 @@ async def test_submit_sell_limit_uses_better_limit_economics_without_quote_id(
 
     posted = client.posted_orders[0]
     assert posted["kind"] == "sell"
-    assert posted["sell_amount"] == "1001234"
-    assert posted["buy_amount"] == "600740400000000000"
-    assert posted["fee_amount"] == "1234"
-    assert posted["valid_to"] == 1_900_000_000
+    assert client.quote_requests == []
+    assert posted["sell_amount"] == "1000000"
+    assert posted["buy_amount"] == "600000000000000000"
+    assert posted["fee_amount"] == "0"
+    assert posted["valid_to"] == 2_800
     assert posted["quote_id"] is None
-    assert tracked.sell_amount == "1001234"
-    assert tracked.buy_amount == "600740400000000000"
+    assert tracked.sell_amount == "1000000"
+    assert tracked.buy_amount == "600000000000000000"
+    assert tracked.valid_to == 2_800
+    assert tracked.fee_amount == "0"
     assert tracked.quote_id is None
+    assert tracked.metadata["order_type"] == "LIMIT"
+
+    recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-limit-sell")
+    assert recovered is not None
+    assert recovered.sell_amount == "1000000"
+    assert recovered.buy_amount == "600000000000000000"
+    assert recovered.valid_to == 2_800
+    assert recovered.fee_amount == "0"
+    assert recovered.quote_id is None
+    assert recovered.state is OrderState.OPEN
+    assert recovered.metadata["order_type"] == "LIMIT"
+    assert recovered.metadata["signing_mode"] == "hummingbot-managed"
 
 
 @pytest.mark.asyncio
@@ -432,6 +497,7 @@ async def test_submit_buy_limit_uses_better_limit_economics_without_quote_id(
 ) -> None:
     client = FakeCoWClient()
     cow = connector(tmp_path, client)
+    cow.clock = lambda: 1_000.75
 
     tracked = await cow.submit_buy_order(
         BuyOrderRequest(
@@ -447,35 +513,53 @@ async def test_submit_buy_limit_uses_better_limit_economics_without_quote_id(
 
     posted = client.posted_orders[0]
     assert posted["kind"] == "buy"
+    assert client.quote_requests == []
     assert posted["sell_amount"] == "950000"
     assert posted["buy_amount"] == "500000000000000000"
-    assert posted["fee_amount"] == "5678"
-    assert posted["valid_to"] == 1_900_000_000
+    assert posted["fee_amount"] == "0"
+    assert posted["valid_to"] == 2_800
     assert posted["quote_id"] is None
     assert tracked.sell_amount == "950000"
     assert tracked.buy_amount == "500000000000000000"
+    assert tracked.valid_to == 2_800
+    assert tracked.fee_amount == "0"
     assert tracked.quote_id is None
+    assert tracked.metadata["order_type"] == "LIMIT"
+
+    recovered = JsonOrderStore(tmp_path / "orders.json").load("cid-limit-buy")
+    assert recovered is not None
+    assert recovered.sell_amount == "950000"
+    assert recovered.buy_amount == "500000000000000000"
+    assert recovered.valid_to == 2_800
+    assert recovered.fee_amount == "0"
+    assert recovered.quote_id is None
+    assert recovered.state is OrderState.OPEN
+    assert recovered.metadata["order_type"] == "LIMIT"
+    assert recovered.metadata["signing_mode"] == "hummingbot-managed"
 
 
 @pytest.mark.asyncio
-async def test_limit_price_cannot_worsen_verified_quote(tmp_path: Path) -> None:
+async def test_submit_limit_prefers_request_valid_to_over_config(tmp_path: Path) -> None:
     client = FakeCoWClient()
     cow = connector(tmp_path, client)
+    cow.clock = lambda: 1_000.75
+    cow.config.valid_to = 2_500
 
-    with pytest.raises(ValueError, match="worsen the verified quote"):
-        await cow.submit_sell_order(
-            SellOrderRequest(
-                client_order_id="cid-limit-worse",
-                trading_pair="USDC-WETH",
-                sell_token=BASE_USDC,
-                buy_token=BASE_WETH,
-                amount="1.0",
-                order_type="LIMIT",
-                price=Decimal("0.4"),
-            )
+    await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-limit-valid-to",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+            valid_to=2_200,
+            order_type="LIMIT",
+            price=Decimal("0.4"),
         )
+    )
 
-    assert client.posted_orders == []
+    assert client.quote_requests == []
+    assert client.posted_orders[0]["valid_to"] == 2_200
 
 
 @pytest.mark.asyncio

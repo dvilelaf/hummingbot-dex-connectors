@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
+from math import floor
 from time import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -39,6 +40,9 @@ if TYPE_CHECKING:
 
 ORDER_DIGEST_HEX_LENGTH = 66
 ORDER_UID_HEX_LENGTH = 114
+UINT256_MAX = 2**256 - 1
+UINT256_DECIMAL_DIGITS = len(str(UINT256_MAX))
+MAX_LIMIT_COEFFICIENT_DIGITS = UINT256_DECIMAL_DIGITS * 2
 EVM_ADDRESS_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
 _RAW_COW_STATUS_MAP = {
     "presignaturepending": OrderState.SUBMITTED,
@@ -134,31 +138,35 @@ class CoWConnector:
         _validate_order_tokens(request.sell_token, request.buy_token)
         _reject_native_regular_order(request.sell_token, request.buy_token)
         sell_amount = amount_to_atomic(request.amount, request.sell_token.decimals)
-        self._preflight_sell(request.sell_token, sell_amount)
-        quote, minimum_buy_amount = await self.quote_sell(
-            request.sell_token,
-            request.buy_token,
-            request.amount,
-            request.valid_to,
-        )
-        _validate_verified_quote(quote)
-        quote_valid_to = _quote_valid_to(quote)
-        fee_amount = _order_fee_amount(self.config, quote)
-        order_sell_amount = _order_sell_amount(self.config, quote)
-        quote_id = _quote_id(quote)
         if request.order_type == "LIMIT":
-            order_buy_amount = _limit_sell_buy_amount(
-                request,
-                order_sell_amount,
-                _quote_buy_amount(quote),
+            order_sell_amount = _validate_uint256_amount(sell_amount)
+            order_buy_amount = _limit_sell_buy_amount(request, order_sell_amount)
+            fee_amount = "0"
+            quote_valid_to = _resolve_limit_valid_to(
+                request.valid_to,
+                self.config.valid_to,
+                floor(self.clock()),
             )
             quote_id = None
+            self._preflight_sell(request.sell_token, order_sell_amount)
         else:
+            self._preflight_sell(request.sell_token, sell_amount)
+            quote, minimum_buy_amount = await self.quote_sell(
+                request.sell_token,
+                request.buy_token,
+                request.amount,
+                request.valid_to,
+            )
+            _validate_verified_quote(quote)
+            quote_valid_to = _quote_valid_to(quote)
+            fee_amount = _order_fee_amount(self.config, quote)
+            order_sell_amount = _order_sell_amount(self.config, quote)
+            quote_id = _quote_id(quote)
             order_buy_amount = minimum_buy_amount
-        if quote_valid_to <= int(self.clock()):
-            message = f"stale CoW quote valid_to={quote_valid_to}"
-            raise StaleQuoteError(message)
-        self._preflight_sell(request.sell_token, order_sell_amount)
+            if quote_valid_to <= int(self.clock()):
+                message = f"stale CoW quote valid_to={quote_valid_to}"
+                raise StaleQuoteError(message)
+            self._preflight_sell(request.sell_token, order_sell_amount)
         order_payload = {
             "chain_id": self.config.chain_id,
             "sell_token": request.sell_token.address,
@@ -222,31 +230,36 @@ class CoWConnector:
         _validate_order_tokens(request.sell_token, request.buy_token)
         _reject_native_regular_order(request.sell_token, request.buy_token)
         _validate_chain(self.config)
-        quote, maximum_sell_amount = await self.quote_buy(
-            request.sell_token,
-            request.buy_token,
-            request.amount,
-            request.valid_to,
-        )
-        _validate_verified_quote(quote)
-        quote_valid_to = _quote_valid_to(quote)
-        fee_amount = _order_fee_amount(self.config, quote)
-        quote_id = _quote_id(quote)
         if request.order_type == "LIMIT":
-            order_buy_amount = _quote_buy_amount(quote)
-            order_sell_amount = _limit_buy_sell_amount(
-                request,
-                order_buy_amount,
-                _order_sell_amount(self.config, quote),
+            order_buy_amount = _validate_uint256_amount(
+                amount_to_atomic(request.amount, request.buy_token.decimals)
+            )
+            order_sell_amount = _limit_buy_sell_amount(request, order_buy_amount)
+            fee_amount = "0"
+            quote_valid_to = _resolve_limit_valid_to(
+                request.valid_to,
+                self.config.valid_to,
+                floor(self.clock()),
             )
             quote_id = None
+            self._preflight_sell(request.sell_token, order_sell_amount)
         else:
+            quote, maximum_sell_amount = await self.quote_buy(
+                request.sell_token,
+                request.buy_token,
+                request.amount,
+                request.valid_to,
+            )
+            _validate_verified_quote(quote)
+            quote_valid_to = _quote_valid_to(quote)
+            fee_amount = _order_fee_amount(self.config, quote)
+            quote_id = _quote_id(quote)
             order_sell_amount = maximum_sell_amount
             order_buy_amount = _quote_buy_amount(quote)
-        if quote_valid_to <= int(self.clock()):
-            message = f"stale CoW quote valid_to={quote_valid_to}"
-            raise StaleQuoteError(message)
-        self._preflight_sell(request.sell_token, order_sell_amount)
+            if quote_valid_to <= int(self.clock()):
+                message = f"stale CoW quote valid_to={quote_valid_to}"
+                raise StaleQuoteError(message)
+            self._preflight_sell(request.sell_token, order_sell_amount)
         order_payload = {
             "chain_id": self.config.chain_id,
             "sell_token": request.sell_token.address,
@@ -498,17 +511,8 @@ def _order_sell_amount(config: CoWConfig, quote: object) -> str:
 def _limit_sell_buy_amount(
     request: SellOrderRequest,
     sell_amount: str,
-    quote_buy_amount: str,
 ) -> str:
     price = _request_price(request.price)
-    _validate_limit_price_against_quote(
-        side="sell",
-        price=price,
-        quote_sell_amount=sell_amount,
-        quote_buy_amount=quote_buy_amount,
-        sell_decimals=request.sell_token.decimals,
-        buy_decimals=request.buy_token.decimals,
-    )
     return _price_to_atomic(
         amount=sell_amount,
         amount_decimals=request.sell_token.decimals,
@@ -521,17 +525,8 @@ def _limit_sell_buy_amount(
 def _limit_buy_sell_amount(
     request: BuyOrderRequest,
     buy_amount: str,
-    quote_sell_amount: str,
 ) -> str:
     price = _request_price(request.price)
-    _validate_limit_price_against_quote(
-        side="buy",
-        price=price,
-        quote_sell_amount=quote_sell_amount,
-        quote_buy_amount=buy_amount,
-        sell_decimals=request.sell_token.decimals,
-        buy_decimals=request.buy_token.decimals,
-    )
     return _price_to_atomic(
         amount=buy_amount,
         amount_decimals=request.buy_token.decimals,
@@ -548,24 +543,30 @@ def _request_price(price: Decimal | None) -> Decimal:
     return price
 
 
-def _validate_limit_price_against_quote(
-    *,
-    side: str,
-    price: Decimal,
-    quote_sell_amount: str,
-    quote_buy_amount: str,
-    sell_decimals: int,
-    buy_decimals: int,
-) -> None:
-    quote_sell = Decimal(quote_sell_amount) / (Decimal(10) ** sell_decimals)
-    quote_buy = Decimal(quote_buy_amount) / (Decimal(10) ** buy_decimals)
-    quote_price = quote_buy / quote_sell if side == "sell" else quote_sell / quote_buy
-    worsens_quote = (side == "sell" and price < quote_price) or (
-        side == "buy" and price > quote_price
-    )
-    if worsens_quote:
-        message = "LIMIT price would worsen the verified quote"
+def _validate_uint256_amount(amount: str) -> str:
+    normalized = amount.lstrip("0")
+    if len(normalized) > UINT256_DECIMAL_DIGITS or (
+        len(normalized) == UINT256_DECIMAL_DIGITS and normalized > str(UINT256_MAX)
+    ):
+        message = "CoW atomic amount exceeds uint256"
         raise ValueError(message)
+    return amount
+
+
+def _resolve_limit_valid_to(
+    request_valid_to: int | None,
+    config_valid_to: int | None,
+    now: int,
+) -> int:
+    valid_to = request_valid_to
+    if valid_to is None:
+        valid_to = config_valid_to
+    if valid_to is None:
+        valid_to = now + 1_800
+    if valid_to <= now:
+        message = f"stale CoW order valid_to={valid_to}"
+        raise StaleQuoteError(message)
+    return int(valid_to)
 
 
 def _price_to_atomic(
@@ -576,16 +577,73 @@ def _price_to_atomic(
     result_decimals: int,
     rounding: str,
 ) -> str:
-    result = (
-        Decimal(amount)
-        / (Decimal(10) ** amount_decimals)
-        * price
-        * (Decimal(10) ** result_decimals)
-    ).to_integral_value(rounding=rounding)
+    amount_decimal = Decimal(amount)
+    if not amount_decimal.is_finite() or not price.is_finite():
+        message = "LIMIT amount and price must be finite"
+        raise ValueError(message)
+    if amount_decimal.is_zero() or price.is_zero():
+        message = "LIMIT price produces a zero atomic amount"
+        raise ValueError(message)
+    amount_sign, amount_digits, amount_exponent = amount_decimal.as_tuple()
+    price_sign, price_digits, price_exponent = price.as_tuple()
+    if (
+        len(amount_digits) > MAX_LIMIT_COEFFICIENT_DIGITS
+        or len(price_digits) > MAX_LIMIT_COEFFICIENT_DIGITS
+    ):
+        message = "LIMIT amount or price coefficient exceeds supported precision"
+        raise ValueError(message)
+
+    # Keep the product as an exact integer ratio until directional rounding.
+    scale_exponent = amount_exponent + price_exponent + result_decimals - amount_decimals
+    coefficient_digits = len(amount_digits) + len(price_digits)
+    if scale_exponent >= 0 and coefficient_digits + scale_exponent > UINT256_DECIMAL_DIGITS + 1:
+        message = "LIMIT atomic amount exceeds uint256"
+        raise ValueError(message)
+
+    result = _round_limit_ratio(
+        amount_digits=amount_digits,
+        price_digits=price_digits,
+        amount_sign=amount_sign,
+        price_sign=price_sign,
+        scale_exponent=scale_exponent,
+        coefficient_digits=coefficient_digits,
+        rounding=rounding,
+    )
     if result <= 0:
         message = "LIMIT price produces a zero atomic amount"
         raise ValueError(message)
-    return str(int(result))
+    if result > UINT256_MAX:
+        message = "LIMIT atomic amount exceeds uint256"
+        raise ValueError(message)
+    return str(result)
+
+
+def _round_limit_ratio(
+    *,
+    amount_digits: tuple[int, ...],
+    price_digits: tuple[int, ...],
+    amount_sign: int,
+    price_sign: int,
+    scale_exponent: int,
+    coefficient_digits: int,
+    rounding: str,
+) -> int:
+    if scale_exponent < 0 and -scale_exponent > coefficient_digits:
+        return 1 if rounding == ROUND_CEILING else 0
+
+    numerator = int("".join(map(str, amount_digits))) * int("".join(map(str, price_digits)))
+    if amount_sign != price_sign:
+        numerator = -numerator
+    if scale_exponent >= 0:
+        numerator *= 10**scale_exponent
+        denominator = 1
+    else:
+        denominator = 10**-scale_exponent
+
+    quotient, remainder = divmod(abs(numerator), denominator)
+    if rounding == ROUND_CEILING and numerator >= 0 and remainder:
+        quotient += 1
+    return quotient if numerator >= 0 else -quotient
 
 
 def _quote_sell_amount(quote: object) -> str:
