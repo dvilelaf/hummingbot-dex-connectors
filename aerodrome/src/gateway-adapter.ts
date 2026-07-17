@@ -59,6 +59,7 @@ export interface TransactionReceipt {
   readonly status: number;
   readonly gasUsed: string;
   readonly effectiveGasPrice: string;
+  readonly l1Fee?: string;
   readonly blockTimestamp: number;
   readonly logs: readonly ReceiptLog[];
 }
@@ -312,6 +313,9 @@ function swapExecutionResponse(
         totalGasWei = totalGasWei.add(
           BigNumber.from(tx.receipt.gasUsed).mul(BigNumber.from(tx.receipt.effectiveGasPrice)),
         );
+        if (tx.receipt.l1Fee !== undefined) {
+          totalGasWei = totalGasWei.add(BigNumber.from(tx.receipt.l1Fee));
+        }
       }
     }
 

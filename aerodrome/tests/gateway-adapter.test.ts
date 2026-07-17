@@ -63,6 +63,7 @@ const approvalReceipt: TransactionReceipt = {
   status: 1,
   gasUsed: '50000',
   effectiveGasPrice: '1000000000',
+  l1Fee: '1000',
   blockTimestamp: 1_699_999_999,
   logs: [],
 };
@@ -71,6 +72,7 @@ const swapReceipt: TransactionReceipt = {
   status: 1,
   gasUsed: '200000',
   effectiveGasPrice: '1500000000',
+  l1Fee: '2000',
   blockTimestamp: 1_700_000_000,
   logs: [wethTransferOut, usdcTransferIn],
 };
@@ -229,7 +231,7 @@ describe('Aerodrome Gateway adapter', () => {
       tokenOut: 'USDC',
       amountIn: '1.5',
       amountOut: '4500',
-      fee: '0.00035',
+      fee: '0.000350000000003',
       feeAsset: 'ETH',
     });
   });
@@ -393,7 +395,7 @@ describe('Aerodrome Gateway adapter', () => {
       tokenOut: 'USDC',
       amountIn: '1.4',
       amountOut: '4490',
-      fee: '0.00035',
+      fee: '0.000350000000003',
       feeAsset: 'ETH',
     });
   });
