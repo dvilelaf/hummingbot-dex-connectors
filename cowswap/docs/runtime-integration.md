@@ -230,7 +230,7 @@ the configured chain and pass the result into
 
 ```bash
 cd cowswap
-RPC_URL=https://base-rpc.publicnode.com
+RPC_URL=https://mainnet.base.org
 uv run python - <<'PY'
 import json
 import os
