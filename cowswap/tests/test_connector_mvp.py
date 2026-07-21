@@ -52,6 +52,7 @@ class FakeCoWClient:
         )
         self.cancelled_uids: list[str] = []
         self.cancellations: list[dict[str, object] | None] = []
+        self.cancel_error: CoWOrderBookAPIError | None = None
         self.status = cow_order(status="open", executed_sell="0", executed_buy="0")
         self.status_sequence: list[object] = []
         self.trades: list[object] = []
@@ -102,6 +103,8 @@ class FakeCoWClient:
     ) -> None:
         self.cancelled_uids.append(order_uid)
         self.cancellations.append(cancellation)
+        if self.cancel_error is not None:
+            raise self.cancel_error
 
 
 class FakeSigner:
@@ -899,6 +902,41 @@ async def test_cancel_order_reconciles_settlement_race_as_filled(tmp_path: Path)
 
     assert client.cancelled_uids == [tracked.order_uid]
     assert cancelled.state is OrderState.FILLED
+
+
+@pytest.mark.asyncio
+async def test_cancel_order_reconciles_expired_provider_race(tmp_path: Path) -> None:
+    account = Account.create()
+    cfg = CoWConfig(
+        chain_id=8453,
+        chain_name="base",
+        owner=account.address,
+        receiver=account.address,
+        app_data="0x" + "00" * 32,
+    )
+    client = FakeCoWClient()
+    cow = CoWConnector(
+        config=cfg,
+        client=client,
+        store=JsonOrderStore(tmp_path / "orders.json"),
+        signer=CowPyEip712Signer(config=cfg, account=account),
+    )
+    tracked = await cow.submit_sell_order(
+        SellOrderRequest(
+            client_order_id="cid-expired-cancel-race",
+            trading_pair="USDC-WETH",
+            sell_token=BASE_USDC,
+            buy_token=BASE_WETH,
+            amount="1.0",
+        )
+    )
+    client.cancel_error = CoWOrderBookAPIError("OrderExpired")
+    client.status = cow_order(status="expired", executed_sell="0", executed_buy="0")
+
+    expired = await cow.cancel_order(tracked.client_order_id)
+
+    assert expired.state is OrderState.EXPIRED
+    assert cow.store.load(tracked.client_order_id).state is OrderState.EXPIRED
 
 
 @pytest.mark.asyncio

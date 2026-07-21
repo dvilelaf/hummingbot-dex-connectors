@@ -345,7 +345,13 @@ class CoWConnector:
             message = "cancel_order requires a Hummingbot-managed signer"
             raise NotImplementedError(message)
         cancellation = self.signer.sign_order_cancellation([tracked.order_uid])
-        await self.client.cancel_order(tracked.order_uid, cancellation)
+        try:
+            await self.client.cancel_order(tracked.order_uid, cancellation)
+        except CoWOrderBookAPIError:
+            reconciled = await self.poll_order(client_order_id)
+            if reconciled.state in TERMINAL_ORDER_STATES:
+                return reconciled
+            raise
         return await self.poll_order(client_order_id)
 
     def _load_order(self, client_order_id: str) -> TrackedOrder:
