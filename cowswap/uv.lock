@@ -1135,6 +1135,7 @@ dependencies = [
     { name = "cowdao-cowpy" },
     { name = "eth-account" },
     { name = "pydantic" },
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -1151,6 +1152,7 @@ requires-dist = [
     { name = "cowdao-cowpy", specifier = ">=1.0.1,<2" },
     { name = "eth-account", specifier = ">=0.13,<1" },
     { name = "pydantic", specifier = ">=2,<3" },
+    { name = "requests", specifier = ">=2.32,<3" },
 ]
 
 [package.metadata.requires-dev]

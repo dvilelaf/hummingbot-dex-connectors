@@ -8,6 +8,7 @@ dependencies = [
     "cowdao-cowpy>=1.0.1,<2",
     "eth-account>=0.13,<1",
     "pydantic>=2,<3",
+    "requests>=2.32,<3",
 ]
 
 [project.scripts]
